@@ -53,7 +53,10 @@ enum DriftState { NONE, SLIDING, WINDOW }
 
 @export_group("Dirección")
 @export var turn_speed := 2.15         ## rad/s de giro con el volante a fondo
-@export var full_steer_speed := 5.0    ## m/s a partir de los que el giro es completo
+@export var full_steer_speed := 2.5    ## m/s a partir de los que el giro es completo
+@export var low_speed_steer := 1.45    ## giro extra a baja velocidad (× turn_speed): recuperarse tras un choque
+@export var low_speed_steer_until := 15.0 ## m/s (≈54 km/h) a los que el giro extra ya ha desaparecido
+@export var pivot_steer := 0.5         ## giro casi parado si aceleras o frenas (fracción del giro completo)
 @export var high_speed_steer := 0.62   ## fracción de giro a velocidad punta
 @export var steer_press_rate := 8.5    ## volante digital: rapidez al girar (1/s)
 @export var steer_release_rate := 14.0 ## rapidez al soltar (vuelve al centro)
@@ -89,6 +92,9 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var mini_turbo_time: Array[float] = [1.6, 2.0, 2.5]    ## s de impulso por nivel
 @export var mini_turbo_kick: Array[float] = [0.6, 0.9, 1.2]    ## m/s de empujón instantáneo por nivel (pequeño: empuje, no tirón)
 @export var mini_turbo_speed: Array[float] = [1.08, 1.12, 1.16]  ## punta durante el mini-turbo por nivel (× max_speed)
+@export var mini_turbo_redirect_keep := 0.97 ## fracción de la velocidad total que pasa a ir hacia delante al saltar
+@export var mini_turbo_yaw_keep := 0.35 ## inercia de giro que queda al saltar (el resto se corta: sale recto)
+@export var mini_turbo_straight_time := 0.25 ## s de agarre extra tras saltar, para que no siga yéndose de lado
 @export var mini_turbo_accel := 7.5    ## m/s² de empuje constante durante el mini-turbo
 @export var boost_fade := 4.0          ## m/s² con los que se vuelve a la punta normal al acabar un impulso
 @export var boost_fire_deg := 16.0     ## al pisar, sale el impulso si la deriva ya es menor que esto
@@ -164,6 +170,7 @@ var boost_armed := false
 var _window_open_t := 0.0
 var _spun := false
 var _flick := 0.0
+var _straight_grip_time := 0.0  ## tras un mini-turbo: agarre extra para salir recto
 
 
 func _ready() -> void:
@@ -269,7 +276,12 @@ func _physics_process(delta: float) -> void:
 	fwd = fwd.normalized()
 	var f := planar.dot(fwd)
 	var speed_ratio := clampf(absf(f) / max_speed, 0.0, 1.0)
-	var authority := clampf(absf(f) / full_steer_speed, 0.0, 1.0) * lerpf(1.0, high_speed_steer, speed_ratio)
+	var authority := clampf(absf(f) / full_steer_speed, 0.0, 1.0)
+	# Casi parado (p. ej. contra un muro): acelerando o frenando el kart puede pivotar
+	authority = maxf(authority, pivot_steer * maxf(throttle, braking) if grounded else 0.0)
+	authority *= lerpf(1.0, high_speed_steer, speed_ratio)
+	# Más giro a baja velocidad; desaparece antes de la velocidad de derrape
+	authority *= lerpf(low_speed_steer, 1.0, smoothstep(full_steer_speed, low_speed_steer_until, absf(f)))
 	var dir_sign := 1.0 if f >= -0.5 else -1.0
 	var slip_deg := rad_to_deg(absf(slip_angle))
 	# La autoridad del volante baja solo con el derrape ya formado: la entrada es viva
@@ -334,6 +346,9 @@ func _physics_process(delta: float) -> void:
 		grip += (1.0 - _slide_speed_factor(speed)) * slide_low_speed_grip  # transición suave
 	grip *= 1.0 - brake_grip_loss * braking * clampf(speed / max_speed, 0.0, 1.0)
 	grip *= 1.0 - _flick
+	if _straight_grip_time > 0.0:
+		_straight_grip_time -= delta
+		grip *= 2.0                         # recién salido del mini-turbo: sale recto
 	if not on_road:
 		grip *= offroad_grip
 	if not grounded:
@@ -484,11 +499,17 @@ func _mini_turbo() -> void:
 	fwd = fwd.normalized()
 	var planar := Vector3(velocity.x, 0.0, velocity.z)
 	var along := planar.dot(fwd)
-	var lateral := planar - fwd * along
-	var new_along := maxf(minf(along + float(mini_turbo_kick[lvl - 1]), max_speed * mult), along)
-	var nv := fwd * new_along + lateral * 0.3
+	# El impulso va hacia donde apunta el kart: la velocidad lateral del derrape se
+	# reorienta hacia delante (se conserva el módulo) y se corta la inercia de giro.
+	var base := maxf(along, planar.length() * mini_turbo_redirect_keep)
+	var new_along := maxf(minf(base + float(mini_turbo_kick[lvl - 1]), max_speed * mult), base)
+	var nv := fwd * new_along
 	velocity.x = nv.x
 	velocity.z = nv.z
+	yaw_rate *= mini_turbo_yaw_keep
+	slip_angle = 0.0
+	slide_amount = 0.0
+	_straight_grip_time = mini_turbo_straight_time
 	turbo_meter = minf(turbo_meter + 0.06 * lvl, 1.0)
 	drift_event.emit("success", lvl)
 	_reset_drift()

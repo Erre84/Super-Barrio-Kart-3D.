@@ -20,7 +20,8 @@ hace falta ir algo por encima de la media (~65 km/h), sin necesidad de ir a tope
 
 El **mini-turbo es un empuje parejo**, no un tirón (v0.6.2: menos fuerza y más duración):
 sube unos 5 km/h por décima de segundo hasta 113 / 117 / 121 km/h (según el nivel) durante
-1,6 / 2,0 / 2,5 s y se apaga suave.
+1,6 / 2,0 / 2,5 s y se apaga suave. Desde la v0.6.3 empuja **hacia donde apunta el kart**:
+al saltar, la velocidad lateral del derrape pasa a ir hacia delante y el kart sale recto.
 En la v0.5 subía hasta 38 km/h de golpe en una décima y llegaba a 136-144 km/h.
 
 ## Cómo se hace (v0.4: más accesible)
