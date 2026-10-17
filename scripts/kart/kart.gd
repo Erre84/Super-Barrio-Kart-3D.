@@ -62,7 +62,7 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var yaw_response_slide := 4.5  ## ... mientras desliza (la carrocería tiene inercia)
 
 @export_group("Adherencia")
-@export var grip_peak := 15.0          ## aceleración lateral máxima con agarre (m/s²)
+@export var grip_peak := 13.0          ## aceleración lateral máxima con agarre (m/s²)
 @export var grip_slide := 11.5         ## agarre dinámico al deslizar (m/s²): inercia lateral
 @export var slip_peak_deg := 4.0       ## deriva hasta la que el agarre es máximo
 @export var slip_full_deg := 14.0      ## deriva a partir de la que el agarre es el dinámico
@@ -71,22 +71,24 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var oversteer := 2.5           ## tendencia a cruzarse mientras desliza (rad/s²)
 @export var drift_angle_target := 30.0 ## deriva de equilibrio con el volante a fondo (°): por encima, se frena el cruce
 @export var flick_grip_loss := 0.75    ## agarre perdido como máximo por un volantazo (transferencia de peso)
-@export var flick_sensitivity := 0.18 ## cuánto agarre quita cada rad/s² de aceleración de giro
+@export var flick_sensitivity := 0.25 ## cuánto agarre quita cada rad/s² de aceleración de giro
 @export var brake_grip_loss := 0.35    ## agarre perdido frenando a fondo (0-1): frenar girando cruza el kart
 @export var slide_drag := 2.5          ## m/s² de velocidad perdida a deriva completa
 @export var offroad_grip := 0.7        ## multiplicador de agarre en tierra
 @export var air_grip := 0.1            ## multiplicador de agarre en el aire
 
 @export_group("Mini-turbo por derrape")
-@export var drift_enter_deg := 7.0    ## deriva que cuenta como derrape
+@export var drift_enter_deg := 6.0    ## deriva que cuenta como derrape
 @export var drift_recover_deg := 5.0   ## deriva por debajo de la cual el kart está enderezado
 @export var drift_recover_hold := 0.08 ## s que hay que mantenerlo enderezado
 @export var drift_spin_deg := 85.0     ## deriva que se considera trompo (derrape inválido)
-@export var drift_min_time := 0.3     ## s mínimos de derrape para que sea válido
-@export var drift_level_times: Array[float] = [0.3, 0.8, 1.4]  ## s de derrape por nivel
-@export var mini_turbo_time: Array[float] = [0.8, 1.1, 1.5]    ## s de impulso por nivel
-@export var mini_turbo_kick: Array[float] = [5.0, 7.0, 9.0]    ## m/s de empujón instantáneo por nivel
-@export var mini_turbo_speed: Array[float] = [1.22, 1.3, 1.38]  ## punta durante el mini-turbo por nivel (× max_speed)
+@export var drift_min_time := 0.15     ## s mínimos de derrape para que sea válido
+@export var drift_level_times: Array[float] = [0.15, 0.6, 1.2]  ## s de derrape por nivel
+@export var mini_turbo_time: Array[float] = [1.0, 1.3, 1.6]    ## s de impulso por nivel
+@export var mini_turbo_kick: Array[float] = [1.5, 2.0, 2.5]    ## m/s de empujón instantáneo por nivel (pequeño: empuje, no tirón)
+@export var mini_turbo_speed: Array[float] = [1.12, 1.17, 1.22]  ## punta durante el mini-turbo por nivel (× max_speed)
+@export var mini_turbo_accel := 11.0   ## m/s² de empuje constante durante el mini-turbo
+@export var boost_fade := 5.0          ## m/s² con los que se vuelve a la punta normal al acabar un impulso
 @export var boost_fire_deg := 16.0     ## al pisar, sale el impulso si la deriva ya es menor que esto
 @export var boost_window := 1.2        ## s tras enderezar para soltar y volver a pisar (si no lo hiciste ya)
 @export var lift_min := 0.04           ## s mínimos con el acelerador suelto
@@ -146,6 +148,7 @@ var drift_slip: float:
 	get: return absf(slip_angle)
 
 var _boost_mult := 1.0
+var _boost_accel := 34.0
 var _pad_cooldown := 0.0
 var _was_on_floor := true
 var _fall_speed := 0.0
@@ -307,9 +310,9 @@ func _physics_process(delta: float) -> void:
 		else:
 			f = move_toward(f, 0.0, coast_decel * delta)
 		if boost_time > 0.0:
-			f = minf(f + boost_accel * delta, top)
+			f = minf(f + _boost_accel * delta, top)
 		elif f > top:
-			f = move_toward(f, top, (offroad_drag if not on_road else 10.0) * delta)
+			f = move_toward(f, top, (offroad_drag if not on_road else boost_fade) * delta)
 
 	# --- 4. Neumáticos: anulan la velocidad lateral hasta su límite de agarre ---
 	slip_deg = rad_to_deg(atan2(absf(l), maxf(absf(f), 1.0)))
@@ -335,7 +338,7 @@ func _physics_process(delta: float) -> void:
 		f = move_toward(f, 0.0, slide_drag * slide_amount * delta) if f > 0.0 else f
 	var new_planar := fwd * f + right * l
 	if boost_time <= 0.0 and new_planar.length() > top * 1.02 and on_road:
-		new_planar = new_planar.normalized() * move_toward(new_planar.length(), top, 10.0 * delta)
+		new_planar = new_planar.normalized() * move_toward(new_planar.length(), top, boost_fade * delta)
 	forward_speed = new_planar.dot(fwd)
 	lateral_speed = new_planar.dot(right)
 	slip_angle = 0.0 if new_planar.length() < 0.5 else -fwd.signed_angle_to(new_planar.normalized(), Vector3.UP)
@@ -578,8 +581,10 @@ func try_turbo() -> bool:
 
 func apply_boost(seconds: float, kind: String, mult: float = -1.0) -> void:
 	var m := boost_speed_mult if mult < 0.0 else mult
+	var acc := mini_turbo_accel if kind.begins_with("mini") else boost_accel
 	if boost_time <= 0.0 or m >= _boost_mult:
 		_boost_mult = m
+		_boost_accel = acc
 	boost_time = maxf(boost_time, seconds)
 	boost_started.emit(kind)
 

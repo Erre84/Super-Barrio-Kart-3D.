@@ -37,7 +37,7 @@ func _run():
 				mx = maxf(mx, _slip())
 				if _slip() < 4.0: kart.input_override = {"accelerate": 1.0}
 				if kart.drift_state != 1 and i > 5: break
-			var c := "T" if "window" in ev else ("D" if "slide" in ev else "·")
+			var c := "T" if ("window" in ev or "success" in ev) else ("D" if "slide" in ev else "·")
 			row += "  %.2f:%s(%2d°)" % [st, c, int(mx)]
 		print("[ease] ", row)
 	quit()

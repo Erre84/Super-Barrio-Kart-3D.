@@ -10,6 +10,18 @@ lateral que pide el giro**, esté donde esté: en una curva, en plena recta o al
 
 ![Marcas de goma de un derrape en recta](img/v0.3/marcas_goma.jpg)
 
+## Zigzag en recta (v0.6)
+
+En una recta a buena velocidad, **gira de un lado a otro pasándote un poco** (≈70 % de volante,
+cambiando de lado cada medio segundo). En cada cambio, **suelta el gas y vuelve a pisar**:
+el kart derrapa a un lado, luego al otro, y cada derrape suelta su mini-turbo. Medido sin
+corregir la trayectoria: 8 derrapes y 7 mini-turbos seguidos. Yendo lento no derrapa
+(a 50 km/h hace falta girar casi a fondo).
+
+El **mini-turbo es un empuje parejo**, no un tirón: sube unos 7 km/h por décima de segundo
+hasta 116 / 122 / 127 km/h (según el nivel) durante 1,0 / 1,3 / 1,6 s y se apaga suave.
+En la v0.5 subía hasta 38 km/h de golpe en una décima y llegaba a 136-144 km/h.
+
 ## Cómo se hace (v0.4: más accesible)
 
 El derrape **lo provocas tú**: con un giro normal el kart agarra y traza preciso; si
@@ -31,8 +43,8 @@ En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T
 1. **Provoca el derrape.** Gira más de la cuenta o da un volantazo. En móvil: lleva el pulgar
    al **borde exterior** del botón ◀ o ▶. El centro del botón es un giro normal (~55 %) y el
    borde interior, un giro suave. Frenar mientras giras también lo cruza.
-2. **Aguántalo un momento.** Basta con **0,3 s** para que cuente. La barra de derrape se
-   llena: **azul** (0,3 s) → **naranja** (0,8 s) → **morado** (1,4 s).
+2. **Aguántalo un momento.** Basta con **0,15 s** para que cuente (v0.6). La barra de
+   derrape se llena: **azul** (0,15 s) → **naranja** (0,6 s) → **morado** (1,2 s).
 3. **Contravolantea para enderezar.** Gira hacia el otro lado: se endereza en ~0,85 s.
    Soltando el volante también se recupera, pero tarda unos 2 s.
 4. **Suelta el gas y vuelve a acelerar (v0.5).** En algún momento del derrape (mientras
@@ -40,9 +52,8 @@ En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T
    pasa a "¡endereza y PISA!" (turbo cargado). Al **volver a pisar** cuando el kart ya está
    saliendo del derrape (menos de 16° de cruce): **¡MINI-TURBO!** Si no habías soltado, al
    quedar recto aparece "¡SUELTA Y PISA!" y tienes 1,2 s para hacerlo.
-   - El impulso da una **patada instantánea** (+18 / +25 / +32 km/h según el nivel) y sube la
-     punta hasta 127 / 136 / 144 km/h durante 0,8 / 1,1 / 1,5 s. Se nota aunque salgas
-     lento del derrape: de 60 km/h a 136 km/h.
+   - El impulso (v0.6) empuja de forma constante hasta 116 / 122 / 127 km/h según el nivel,
+     durante 1,0 / 1,3 / 1,6 s. Se nota aunque salgas lento del derrape: de 60 a 127 km/h.
 
 **Encadenar.** Después de un mini-turbo puedes provocar otro enseguida, también en recta:
 volantazo a un lado → contravolante → suelta y pisa → volantazo al otro…
@@ -87,7 +98,8 @@ Todo está en el inspector del nodo `Kart` (`scripts/kart/kart.gd`):
   `flick_sensitivity` (volantazos), `brake_grip_loss`, `slide_drag`.
 - **Mini-turbo**: `drift_enter_deg`, `drift_recover_deg`, `drift_recover_hold`,
   `drift_spin_deg`, `drift_min_time`, `drift_level_times`, `mini_turbo_time`,
-  `mini_turbo_speed` (punta por nivel), `mini_turbo_kick` (empujón instantáneo por nivel),
+  `mini_turbo_speed` (punta por nivel), `mini_turbo_accel` (fuerza del empuje constante),
+  `mini_turbo_kick` (empujón instantáneo, pequeño), `boost_fade` (lo suave que se apaga),
   `boost_fire_deg` (cruce máximo al pisar), `boost_window`, `lift_min`.
 
 **Cómo funciona por dentro.** Cada fotograma:

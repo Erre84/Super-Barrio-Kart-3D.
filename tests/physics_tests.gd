@@ -60,6 +60,8 @@ func _run() -> void:
 	await _test_throttle_spam_no_boost()
 	await _test_window_spam_single_boost()
 	await _test_chain_on_straight()
+	await _test_zigzag_chain()
+	await _test_boost_smooth()
 	# --- Generales ---
 	await _test_reverse()
 	await _test_turbo_top_speed()
@@ -320,8 +322,8 @@ func _test_steer_release() -> void:
 # =============================================================================
 
 func _test_grip_moderate_turn() -> void:
-	var r := await _turn("steer_right", 0.4, 60)
-	_check("giro normal (40 %) a 104 km/h: agarra", r["slip"] < 4.0, "deriva máxima %.1f°" % r["slip"])
+	var r := await _turn("steer_right", 0.35, 60)
+	_check("giro normal (35 %) a 104 km/h: agarra", r["slip"] < 4.0, "deriva máxima %.1f°" % r["slip"])
 	# Pasarse de giro (75 %) en recta ya provoca el derrape
 	var o := await _turn("steer_right", 0.75, 40)
 	_check("pasarse de giro (75 %) en recta: derrapa", o["slip"] > 10.0 and events.size() > 0 and String(events[0]).begins_with("slide"),
@@ -591,3 +593,50 @@ func _test_natural_exit(label: String, lift_at: String, press_at: String) -> voi
 			vmax = maxf(vmax, kart.get_speed_kmh())
 	_check("mini-turbo natural: " + label, _boosts("success") == 1 and vmax > 120.0,
 			"sale a %.0f km/h → impulso hasta %.0f km/h (punta normal 104)" % [vmin, vmax])
+
+
+## Zigzag en recta: volante al 75 % cambiando de lado cada 0,5 s, soltando el gas al cambiar
+## y pisando enseguida. Debe derrapar y encadenar mini-turbos sin salirse de una calle de 24 m.
+func _test_zigzag_chain() -> void:
+	await _at_speed(200)
+	var x0: float = kart.global_position.x
+	var maxdev := 0.0
+	var side := 1.0
+	for k in 8:
+		var steps := 15 if k == 0 else 30
+		for i in steps:
+			var d := {"accelerate": 0.0 if (i < 9 and k > 0) else 1.0}
+			d["steer_right" if side > 0 else "steer_left"] = 0.75
+			_inp(d)
+			await physics_frame
+			maxdev = maxf(maxdev, absf(kart.global_position.x - x0))
+		side = -side
+	var slides := 0
+	for e in events:
+		if String(e).begins_with("slide"):
+			slides += 1
+	# Sin corregir la trayectoria (un jugador sí corrige): v0.5.1 daba 0 turbos aquí.
+	_check("zigzag en recta: derrapa y encadena mini-turbos", slides >= 6 and _boosts("success") >= 5 and maxdev < 15.0,
+			"%d derrapes, %d mini-turbos, se aparta ±%.1f m de la recta" % [slides, _boosts("success"), maxdev])
+
+
+## El mini-turbo empuja de forma pareja: nunca más de 16 km/h en 0,1 s (v0.5.1: 38,6, un tirón).
+func _test_boost_smooth() -> void:
+	await _at_speed(200)
+	_inp({"accelerate": 0.0, "steer_right": 1.0})
+	await _frames(40)
+	_inp({"accelerate": 0.0, "steer_left": 1.0})
+	while _slip() > 12.0:
+		await physics_frame
+	_inp({"accelerate": 1.0})
+	var prev: float = kart.get_speed_kmh()
+	var max_jump := 0.0
+	var vmax := 0.0
+	for i in 15:
+		await _frames(6)
+		var v: float = kart.get_speed_kmh()
+		max_jump = maxf(max_jump, v - prev)
+		vmax = maxf(vmax, v)
+		prev = v
+	_check("mini-turbo como empuje parejo (sin tirón)", _boosts("success") == 1 and max_jump < 16.0 and vmax > 110.0 and vmax < 132.0,
+			"subida máx. %.1f km/h por 0,1 s, pico %.0f km/h" % [max_jump, vmax])

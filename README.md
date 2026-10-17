@@ -4,6 +4,9 @@ Arcade de karts **poligonal** para **PC y Android**, hecho con **Godot 4** y **G
 Proyecto independiente que sucede a *Super Barrio Kart v16* (2D): mismo concepto, ambiente
 urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
+> **Versión 0.6.0:** derrapa en cuanto te pasas un poco de giro (zigzag en recta encadenando
+> mini-turbos) y el impulso es un empuje más suave y constante.
+>
 > **Versión 0.5.0:** el mini-turbo sale al volver a acelerar tras el derrape (suelta el gas
 > cuando quieras durante el derrape y pisa al salir) y el impulso se nota mucho más.
 >

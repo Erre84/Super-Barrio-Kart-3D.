@@ -65,7 +65,7 @@ class DriftMeter extends Control:
 	const COLS := [Color("3fa9ff"), Color("ff8c1a"), Color("c75cff")]
 	var state := 0          # 0 nada, 1 derrapando, 2 ventana
 	var drift_time := 0.0
-	var levels: Array[float] = [0.3, 0.8, 1.4]
+	var levels: Array[float] = [0.15, 0.6, 1.2]
 	var level := 0
 	var window_frac := 0.0
 	var slip_deg := 0.0

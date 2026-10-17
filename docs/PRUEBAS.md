@@ -19,6 +19,23 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
+## Resultados de la v0.6: zigzag en recta e impulso más suave
+
+Petición tras probar la 0.5.1: que derrape en cuanto te pasas un poco de giro, para ir en
+zigzag por las rectas encadenando mini-turbos, y que el impulso sea un poco menos rápido y
+más constante.
+
+| Medida | v0.5.1 | v0.6 |
+|---|---|---|
+| Zigzag en recta (75 % de volante, cambio cada 0,5 s) | 5 derrapes, **0 mini-turbos** | 8 derrapes, **7 mini-turbos** |
+| Subida máxima de velocidad en 0,1 s con el mini-turbo | **38,6 km/h** (tirón) | **14,3 km/h** (empuje) |
+| Pico del mini-turbo (nivel 1 / 3) | 127 / 144 km/h | 116 / 127 km/h |
+| Giro que aún agarra a 104 km/h | 40 % | 35 % |
+| Mini-turbos del piloto automático por vuelta | 6 | 10 |
+
+Herramientas nuevas: `tests/drift_zigzag.gd` (tabla de zigzag por cantidad de volante y
+ritmo). Pruebas nuevas: zigzag encadenado y empuje parejo. 36/36 OK.
+
 ## Resultados de la v0.5: el mini-turbo sale al volver a acelerar
 
 Problema tras probar la 0.4: "cuando derrapo y vuelvo a acelerar, falta el impulso". Causa
