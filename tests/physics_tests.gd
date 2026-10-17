@@ -625,7 +625,7 @@ func _test_natural_exit(label: String, lift_at: String, press_at: String) -> voi
 		vmin = minf(vmin, kart.get_speed_kmh())
 		if _boosts("success") > 0:
 			vmax = maxf(vmax, kart.get_speed_kmh())
-	_check("mini-turbo natural: " + label, _boosts("success") == 1 and vmax > 120.0,
+	_check("mini-turbo natural: " + label, _boosts("success") == 1 and vmax > 112.0,
 			"sale a %.0f km/h → impulso hasta %.0f km/h (punta normal 104)" % [vmin, vmax])
 
 

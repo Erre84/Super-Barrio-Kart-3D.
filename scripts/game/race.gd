@@ -194,8 +194,8 @@ func _on_drift_event(kind: String, level: int) -> void:
 		"success":
 			hud.show_message(["¡MINI-TURBO!", "¡MINI-TURBO!", "¡SUPER MINI-TURBO!"][clampi(level, 1, 3) - 1],
 					"", 0.8, col)
-			camera.punch(8.0 + level * 3.0)
-			camera.add_shake(0.12 + 0.04 * level)
+			camera.punch(5.0 + level * 2.0)
+			camera.add_shake(0.08 + 0.03 * level)
 		"fail_late":
 			hud.show_message("", "Tarde: pisa antes", 0.9, Color.WHITE)
 		"fail_lift":

@@ -86,11 +86,11 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var drift_spin_deg := 85.0     ## deriva que se considera trompo (derrape inválido)
 @export var drift_min_time := 0.15     ## s mínimos de derrape para que sea válido
 @export var drift_level_times: Array[float] = [0.15, 0.6, 1.2]  ## s de derrape por nivel
-@export var mini_turbo_time: Array[float] = [1.0, 1.3, 1.6]    ## s de impulso por nivel
-@export var mini_turbo_kick: Array[float] = [1.0, 1.4, 1.8]    ## m/s de empujón instantáneo por nivel (pequeño: empuje, no tirón)
-@export var mini_turbo_speed: Array[float] = [1.12, 1.17, 1.22]  ## punta durante el mini-turbo por nivel (× max_speed)
-@export var mini_turbo_accel := 11.0   ## m/s² de empuje constante durante el mini-turbo
-@export var boost_fade := 5.0          ## m/s² con los que se vuelve a la punta normal al acabar un impulso
+@export var mini_turbo_time: Array[float] = [1.6, 2.0, 2.5]    ## s de impulso por nivel
+@export var mini_turbo_kick: Array[float] = [0.6, 0.9, 1.2]    ## m/s de empujón instantáneo por nivel (pequeño: empuje, no tirón)
+@export var mini_turbo_speed: Array[float] = [1.08, 1.12, 1.16]  ## punta durante el mini-turbo por nivel (× max_speed)
+@export var mini_turbo_accel := 7.5    ## m/s² de empuje constante durante el mini-turbo
+@export var boost_fade := 4.0          ## m/s² con los que se vuelve a la punta normal al acabar un impulso
 @export var boost_fire_deg := 16.0     ## al pisar, sale el impulso si la deriva ya es menor que esto
 @export var boost_window := 1.2        ## s tras enderezar para soltar y volver a pisar (si no lo hiciste ya)
 @export var lift_min := 0.04           ## s mínimos con el acelerador suelto
