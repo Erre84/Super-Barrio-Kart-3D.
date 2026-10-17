@@ -36,6 +36,10 @@ Además el impulso era flojo (+18 % de punta) y casi no se notaba al salir lento
 | Suelta al contravolantear, pisa mientras sale | **nada** | turbo (77 → 136 km/h) |
 | No suelta nunca el gas | nada | nada (a propósito) |
 
+**v0.5.1.** Segunda causa encontrada con `tests/drift_late_lift.gd`: si soltabas y pisabas
+con el kart ya recto, solo valía hacerlo en los primeros ~0,6 s. Ahora el plazo es de 1,2 s
+(medido: da turbo soltando hasta 0,9 s después de enderezar y pisando 0,13 s más tarde).
+
 Siguen bloqueados: machacar el acelerador sin derrapar (0 turbos) y machacarlo en la ventana
 (un solo turbo). El piloto automático consigue **6 mini-turbos en una vuelta** sin maniobra
 programada (antes 1). 34/34 pruebas de física OK.

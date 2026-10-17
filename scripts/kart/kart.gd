@@ -88,7 +88,7 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var mini_turbo_kick: Array[float] = [5.0, 7.0, 9.0]    ## m/s de empujón instantáneo por nivel
 @export var mini_turbo_speed: Array[float] = [1.22, 1.3, 1.38]  ## punta durante el mini-turbo por nivel (× max_speed)
 @export var boost_fire_deg := 16.0     ## al pisar, sale el impulso si la deriva ya es menor que esto
-@export var boost_window := 0.7        ## s tras enderezar para soltar y volver a pisar (si no lo hiciste ya)
+@export var boost_window := 1.2        ## s tras enderezar para soltar y volver a pisar (si no lo hiciste ya)
 @export var lift_min := 0.04           ## s mínimos con el acelerador suelto
 
 @export_group("Turbo")

@@ -39,7 +39,7 @@ En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T
    derrapas, al contravolantear o al quedar recto) **suelta el acelerador**: el indicador
    pasa a "¡endereza y PISA!" (turbo cargado). Al **volver a pisar** cuando el kart ya está
    saliendo del derrape (menos de 16° de cruce): **¡MINI-TURBO!** Si no habías soltado, al
-   quedar recto aparece "¡SUELTA Y PISA!" y tienes 0,7 s para hacerlo.
+   quedar recto aparece "¡SUELTA Y PISA!" y tienes 1,2 s para hacerlo.
    - El impulso da una **patada instantánea** (+18 / +25 / +32 km/h según el nivel) y sube la
      punta hasta 127 / 136 / 144 km/h durante 0,8 / 1,1 / 1,5 s. Se nota aunque salgas
      lento del derrape: de 60 km/h a 136 km/h.
