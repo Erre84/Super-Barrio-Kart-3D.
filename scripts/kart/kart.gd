@@ -66,7 +66,9 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var grip_slide := 11.5         ## agarre dinámico al deslizar (m/s²): inercia lateral
 @export var slip_peak_deg := 4.0       ## deriva hasta la que el agarre es máximo
 @export var slip_full_deg := 14.0      ## deriva a partir de la que el agarre es el dinámico
-@export var slide_min_speed := 8.0    ## por debajo de esta velocidad (m/s) no se pierde adherencia
+@export var slide_min_speed := 15.0   ## por debajo de esta velocidad (m/s, ≈54 km/h) no se pierde adherencia
+@export var slide_full_speed := 18.0  ## desde esta velocidad (m/s, ≈65 km/h) derrapa igual de fácil que a tope
+@export var slide_low_speed_grip := 20.0 ## agarre extra (m/s²) justo por encima de slide_min_speed; se desvanece hasta slide_full_speed
 @export var slide_steer := 0.45        ## autoridad del volante mientras desliza (contravolante incluido)
 @export var oversteer := 2.5           ## tendencia a cruzarse mientras desliza (rad/s²)
 @export var drift_angle_target := 30.0 ## deriva de equilibrio con el volante a fondo (°): por encima, se frena el cruce
@@ -85,7 +87,7 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var drift_min_time := 0.15     ## s mínimos de derrape para que sea válido
 @export var drift_level_times: Array[float] = [0.15, 0.6, 1.2]  ## s de derrape por nivel
 @export var mini_turbo_time: Array[float] = [1.0, 1.3, 1.6]    ## s de impulso por nivel
-@export var mini_turbo_kick: Array[float] = [1.5, 2.0, 2.5]    ## m/s de empujón instantáneo por nivel (pequeño: empuje, no tirón)
+@export var mini_turbo_kick: Array[float] = [1.0, 1.4, 1.8]    ## m/s de empujón instantáneo por nivel (pequeño: empuje, no tirón)
 @export var mini_turbo_speed: Array[float] = [1.12, 1.17, 1.22]  ## punta durante el mini-turbo por nivel (× max_speed)
 @export var mini_turbo_accel := 11.0   ## m/s² de empuje constante durante el mini-turbo
 @export var boost_fade := 5.0          ## m/s² con los que se vuelve a la punta normal al acabar un impulso
@@ -215,6 +217,11 @@ func _update_steering(steer_in: float, delta: float) -> void:
 	steer_value = move_toward(steer_value, steer_in, rate * delta)
 
 
+## 0 por debajo de slide_min_speed, 1 desde slide_full_speed: cuánto puede derrapar a esta velocidad.
+func _slide_speed_factor(speed: float) -> float:
+	return smoothstep(slide_min_speed, maxf(slide_full_speed, slide_min_speed + 0.1), speed)
+
+
 ## Agarre lateral disponible (m/s²) según el ángulo de deriva.
 func grip_at(slip_deg: float) -> float:
 	var t := smoothstep(slip_peak_deg, slip_full_deg, slip_deg)
@@ -279,7 +286,7 @@ func _physics_process(delta: float) -> void:
 	var loading := absf(yaw_rate) > absf(prev_yaw_rate)
 	_flick = 0.0
 	if loading:
-		_flick = clampf(absf(yaw_rate - prev_yaw_rate) / delta * flick_sensitivity, 0.0, flick_grip_loss) * speed_ratio * speed_ratio
+		_flick = clampf(absf(yaw_rate - prev_yaw_rate) / delta * flick_sensitivity, 0.0, flick_grip_loss) * _slide_speed_factor(speed)
 	# Sobreviraje: deslizando, el kart tiende a cruzarse más (hay que contravolantear)
 	if grounded and slide_amount > 0.0 and speed > slide_min_speed:
 		var push := clampf(1.0 - slip_deg / maxf(drift_angle_target, 1.0), -1.0, 1.0)
@@ -317,8 +324,14 @@ func _physics_process(delta: float) -> void:
 	# --- 4. Neumáticos: anulan la velocidad lateral hasta su límite de agarre ---
 	slip_deg = rad_to_deg(atan2(absf(l), maxf(absf(f), 1.0)))
 	var grip := grip_at(slip_deg)
-	if speed < slide_min_speed:
+	# La velocidad mínima decide si se puede EMPEZAR a derrapar; un derrape ya formado sigue
+	# hasta que el kart va de verdad despacio (y frenar a fondo puede acabar en trompo).
+	var sliding_now := slide_amount > 0.05
+	var min_v := slide_min_speed * (0.6 if sliding_now else 1.0)
+	if speed < min_v:
 		grip = 1000.0                       # a baja velocidad el kart siempre agarra
+	elif not sliding_now:
+		grip += (1.0 - _slide_speed_factor(speed)) * slide_low_speed_grip  # transición suave
 	grip *= 1.0 - brake_grip_loss * braking * clampf(speed / max_speed, 0.0, 1.0)
 	grip *= 1.0 - _flick
 	if not on_road:

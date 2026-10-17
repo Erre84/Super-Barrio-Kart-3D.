@@ -19,6 +19,25 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
+## Resultados de la v0.6.1: velocidad mínima para derrapar
+
+Matiz del usuario: yendo lento no se debe poder derrapar, pero tampoco hace falta ir a tope;
+basta con ir un poco por encima de la velocidad media.
+
+Zigzag manteniendo la velocidad (`tests/drift_speed_map.gd`, volante a fondo):
+
+| Velocidad | v0.6 | v0.6.1 |
+|---|---|---|
+| 40 km/h | derrapa (19°) | **no derrapa** |
+| 50 km/h | derrapa (25°) | **no derrapa** |
+| 55 km/h | derrapa (26°) | **no derrapa** |
+| 60 km/h | derrapa | derrapa (22°) |
+| 65-104 km/h | derrapa | derrapa (26-28°) |
+
+Al 75 % de volante empieza a 65 km/h. El empujón inicial del mini-turbo baja un poco más
+(subida máx. 13,5 km/h por 0,1 s). Pruebas nuevas: no derrapa a 50 km/h ni a fondo; a 70 km/h
+pasarse de giro sí derrapa. 39/39 OK; vuelta del piloto automático 39,8 s, 0 reapariciones.
+
 ## Resultados de la v0.6: zigzag en recta e impulso más suave
 
 Petición tras probar la 0.5.1: que derrape en cuanto te pasas un poco de giro, para ir en

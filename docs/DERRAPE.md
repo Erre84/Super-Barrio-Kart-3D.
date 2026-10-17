@@ -15,8 +15,8 @@ lateral que pide el giro**, esté donde esté: en una curva, en plena recta o al
 En una recta a buena velocidad, **gira de un lado a otro pasándote un poco** (≈70 % de volante,
 cambiando de lado cada medio segundo). En cada cambio, **suelta el gas y vuelve a pisar**:
 el kart derrapa a un lado, luego al otro, y cada derrape suelta su mini-turbo. Medido sin
-corregir la trayectoria: 8 derrapes y 7 mini-turbos seguidos. Yendo lento no derrapa
-(a 50 km/h hace falta girar casi a fondo).
+corregir la trayectoria: 8 derrapes y 7 mini-turbos seguidos. Yendo lento no derrapa:
+hace falta ir algo por encima de la media (~65 km/h), sin necesidad de ir a tope.
 
 El **mini-turbo es un empuje parejo**, no un tirón: sube unos 7 km/h por décima de segundo
 hasta 116 / 122 / 127 km/h (según el nivel) durante 1,0 / 1,3 / 1,6 s y se apaga suave.
@@ -28,15 +28,22 @@ El derrape **lo provocas tú**: con un giro normal el kart agarra y traza precis
 **giras de golpe** o **un poco más de lo que pide la curva** (también en plena recta), las
 ruedas pierden agarre y el kart se cruza.
 
-**Cuándo derrapa** (medido con `tests/drift_ease_map.gd`: medio segundo de giro y luego
-contravolante). · = agarra, D = derrapa, **T = derrapa y da opción a mini-turbo**:
+**Cuándo derrapa** (v0.6.1, medido con `tests/drift_ease_map.gd`: medio segundo de giro sin
+gas y luego contravolante). · = agarra, **T = derrapa y da opción a mini-turbo**:
 
 | Velocidad | 40 % volante | 55 % | 70 % | 85 % | 100 % |
 |---|---|---|---|---|---|
-| 50 km/h | · | · | · | D | **T** |
-| 65 km/h | · | · | D | **T** | **T** |
-| 80 km/h | · | · | **T** | **T** | **T** |
-| 104 km/h | · | D | **T** | **T** | **T** |
+| 50 km/h | · | · | · | · | · |
+| 60 km/h | · | · | · | · | · |
+| 70 km/h | · | **T** | **T** | **T** | **T** |
+| 80 km/h | · | **T** | **T** | **T** | **T** |
+| 104 km/h | · | **T** | **T** | **T** | **T** |
+
+**Velocidad mínima (v0.6.1):** yendo lento no derrapa nunca (hasta ~55 km/h, ni con el
+volante a fondo). A partir de ~60 km/h empieza a poder cruzarse y desde ~65 km/h (algo por
+encima de la media; la punta es 104) derrapa igual de fácil que a tope. Un derrape ya
+empezado no se corta por bajar de esa velocidad: sigue hasta ~32 km/h. Parámetros:
+`slide_min_speed` (15 m/s), `slide_full_speed` (18 m/s) y `slide_low_speed_grip`.
 
 En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T".
 
@@ -93,7 +100,7 @@ Todo está en el inspector del nodo `Kart` (`scripts/kart/kart.gd`):
   volante deslizando, incluido el contravolante).
 - **Adherencia**: `grip_peak` (m/s² de aceleración lateral con agarre), `grip_slide`
   (agarre dinámico: más bajo = más inercia lateral), `slip_peak_deg` / `slip_full_deg`
-  (forma de la curva de agarre), `slide_min_speed`, `oversteer` y `drift_angle_target`
+  (forma de la curva de agarre), `slide_min_speed` / `slide_full_speed` (velocidad para derrapar), `oversteer` y `drift_angle_target`
   (tendencia a cruzarse y ángulo de equilibrio), `flick_grip_loss` /
   `flick_sensitivity` (volantazos), `brake_grip_loss`, `slide_drag`.
 - **Mini-turbo**: `drift_enter_deg`, `drift_recover_deg`, `drift_recover_hold`,
@@ -122,7 +129,8 @@ derrapes preprogramados: todo sale de esas fuerzas. Las pruebas automáticas lo 
 | Pasarse de giro (75 %) en recta | derrapa (22°) |
 | Volantazo a fondo en recta a 104 km/h | derrapa desde 0,23 s, hasta 31° y 15 m/s laterales |
 | Pérdida de agarre | progresiva: 9° → 22° → 31° en 0,25 / 0,5 / 0,75 s (máx. 0,9° por fotograma) |
-| Volante a fondo a 22 km/h | no derrapa |
+| Volante a fondo a 22 km/h / zigzag a fondo a 50 km/h | no derrapa |
+| Zigzag al 75 % a 70 km/h | derrapa (21°) |
 | Volante a fondo sostenido | derrape estable entre 35° y 41° durante 2 s, sin trompo |
 | Enderezar con contravolante / soltando el volante | 0,85 s / 2,0 s |
 | Frenar a fondo derrapando | trompo (92°) y derrape anulado |

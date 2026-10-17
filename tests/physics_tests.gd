@@ -360,6 +360,32 @@ func _test_progressive_grip_loss() -> void:
 			"deriva %.1f° → %.1f° → %.1f° (0,25 / 0,5 / 0,75 s), salto máx. %.2f°/fotograma" % [series[15], series[30], series[45], max_step])
 
 
+## Acelera hasta `kmh` y luego hace zigzag `changes` veces (volante `amount`, cambio cada 0,5 s)
+## manteniendo esa velocidad con el gas. Devuelve [deriva máx., derrapes].
+func _zigzag_at(kmh: float, amount: float, changes := 4) -> Array:
+	_release_all()
+	kart.track = null
+	kart.on_road = true
+	kart.place(Transform3D(Basis(), Vector3(900, 0.05, 900)))
+	_inp({"accelerate": 1.0})
+	var guard := 0
+	while kart.get_speed_kmh() < kmh and guard < 600:
+		await physics_frame
+		guard += 1
+	events.clear()
+	var mx := 0.0
+	var side := 1.0
+	for c in changes:
+		for i in 30:
+			var o := {"accelerate": 1.0 if kart.get_speed_kmh() < kmh else 0.0}
+			o["steer_right" if side > 0 else "steer_left"] = amount
+			_inp(o)
+			await physics_frame
+			mx = maxf(mx, _slip())
+		side = -side
+	return [mx, _boosts("slide")]
+
+
 func _test_low_speed_grips() -> void:
 	await _at_speed(22)   # ~25 km/h
 	var v: float = kart.get_speed_kmh()
@@ -369,6 +395,14 @@ func _test_low_speed_grips() -> void:
 		await physics_frame
 		mx = maxf(mx, _slip())
 	_check("a baja velocidad no derrapa", mx < 3.0, "%.0f km/h, volante a fondo: deriva %.1f°" % [v, mx])
+	# Velocidad media (50 km/h): ni con el volante a fondo en zigzag
+	var r50: Array = await _zigzag_at(50.0, 1.0)
+	_check("a velocidad media (50 km/h) no derrapa ni con el volante a fondo", r50[1] == 0 and r50[0] < 4.0,
+			"zigzag a fondo: deriva máx. %.1f°, %d derrapes" % [r50[0], r50[1]])
+	# Un poco por encima de la media (70 km/h, punta 104): pasarse de giro ya derrapa
+	var r70: Array = await _zigzag_at(70.0, 0.75)
+	_check("algo por encima de la media (70 km/h) pasarse de giro derrapa", r70[1] >= 1 and r70[0] > 10.0,
+			"zigzag al 75 %%: deriva máx. %.1f°, %d derrapes" % [r70[0], r70[1]])
 
 
 func _slide_series(side: String) -> Array[float]:

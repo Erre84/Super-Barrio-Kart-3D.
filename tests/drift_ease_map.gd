@@ -18,7 +18,7 @@ func _run():
 	var ev := []
 	kart.drift_event.connect(func(k, l): ev.append(k))
 	print("[ease] filas: velocidad; columnas: volante (giro de 0,5 s y contravolante). D=derrapa, T=abre ventana de turbo, ·=agarra")
-	for kmh in [50, 65, 80, 104]:
+	for kmh in [50, 60, 70, 80, 104]:
 		var row := "%3d km/h:" % kmh
 		for st in [0.4, 0.55, 0.7, 0.85, 1.0]:
 			ev.clear()
