@@ -16,6 +16,8 @@ var target: Node3D
 var looking_back := false
 var _yaw := 0.0
 var _shake := 0.0
+var _punch := 0.0
+var _fov_base := 70.0
 var _was_back := false
 var _initialized := false
 
@@ -30,6 +32,11 @@ func _ready() -> void:
 
 func snap() -> void:
 	_initialized = false
+
+
+## Golpe de FOV (mini-turbo): la cámara "se estira" un instante.
+func punch(degrees: float) -> void:
+	_punch = maxf(_punch, degrees)
 
 
 func add_shake(amount: float) -> void:
@@ -74,4 +81,6 @@ func _physics_process(delta: float) -> void:
 	if "boost_time" in target:
 		boosting = target.boost_time > 0.0
 	var target_fov := base_fov + speed_ratio * 8.0 + (9.0 if boosting else 0.0)
-	fov = lerpf(fov, target_fov, 1.0 - exp(-5.0 * delta))
+	_punch = move_toward(_punch, 0.0, delta * 14.0)
+	_fov_base = lerpf(_fov_base, target_fov, 1.0 - exp(-5.0 * delta))
+	fov = _fov_base + _punch

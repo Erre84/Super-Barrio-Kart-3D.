@@ -7,8 +7,10 @@
 #
 # Qué comprueba:
 #   1. Que el proyecto se importa y todos los scripts compilan sin errores.
-#   2. Casos concretos de física (tests/physics_tests.gd): sin autocorrección de dirección,
-#      marcha atrás, velocidad punta, turbo, derrape hasta nivel 3, muros, conos, tierra.
+#   2. Casos concretos de física (tests/physics_tests.gd): sin autocorrección, giro simétrico,
+#      derrape natural por pérdida de agarre, contravolante, mini-turbo por maniobra y sus
+#      trampas (machacar el acelerador, ventana, derrape corto, trompo), encadenado en recta,
+#      marcha atrás, punta, turbo, muros, conos y tierra.
 #   3. Que un piloto automático (que usa las mismas acciones de entrada que el jugador)
 #      completa una vuelta entera, supera 80 km/h y es capaz de ir marcha atrás.
 set -euo pipefail

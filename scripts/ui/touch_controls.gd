@@ -11,6 +11,7 @@ signal pause_pressed
 var buttons: Array = []           # {id, action, label, center(rel), radius(rel), color}
 var _touch_to_button := {}        # índice de dedo -> id de botón
 var _pressed := {}                # id -> bool
+var _strength := {}               # id -> intensidad del giro (táctil analógico)
 const MOUSE_ID := -100
 
 
@@ -21,10 +22,9 @@ func _ready() -> void:
 		{"id": "left", "action": "steer_left", "label": "◀", "pos": Vector2(0.09, 0.80), "r": 0.085, "color": Color("2b6fe0")},
 		{"id": "right", "action": "steer_right", "label": "▶", "pos": Vector2(0.235, 0.80), "r": 0.085, "color": Color("2b6fe0")},
 		{"id": "look", "action": "look_back", "label": "ATRÁS", "pos": Vector2(0.07, 0.52), "r": 0.05, "color": Color("6c757d")},
-		{"id": "accel", "action": "accelerate", "label": "ACEL", "pos": Vector2(0.9, 0.78), "r": 0.1, "color": Color("2a9d8f")},
-		{"id": "brake", "action": "brake", "label": "FRENO", "pos": Vector2(0.745, 0.86), "r": 0.065, "color": Color("e63946")},
-		{"id": "drift", "action": "drift", "label": "DERRAPE", "pos": Vector2(0.77, 0.6), "r": 0.07, "color": Color("f4a261")},
-		{"id": "turbo", "action": "turbo", "label": "TURBO", "pos": Vector2(0.915, 0.5), "r": 0.06, "color": Color("8e44ad")},
+		{"id": "accel", "action": "accelerate", "label": "ACEL", "pos": Vector2(0.885, 0.76), "r": 0.115, "color": Color("2a9d8f")},
+		{"id": "brake", "action": "brake", "label": "FRENO", "pos": Vector2(0.715, 0.85), "r": 0.07, "color": Color("e63946")},
+		{"id": "turbo", "action": "turbo", "label": "TURBO", "pos": Vector2(0.9, 0.44), "r": 0.065, "color": Color("8e44ad")},
 		{"id": "pause", "action": "", "label": "II", "pos": Vector2(0.36, 0.07), "r": 0.035, "color": Color("1d2135")},
 	]
 	visible = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
@@ -60,6 +60,7 @@ func _input(event: InputEvent) -> void:
 		var t := event as InputEventScreenTouch
 		if t.pressed:
 			_assign(t.index, _button_at(t.position))
+			_update_steer_strength(t.index, t.position)
 		else:
 			_assign(t.index, "")
 	elif event is InputEventScreenDrag:
@@ -69,11 +70,33 @@ func _input(event: InputEvent) -> void:
 		var cur: String = _touch_to_button.get(d.index, "")
 		if id != cur and (id in ["left", "right"] or cur in ["left", "right"]):
 			_assign(d.index, id)
+		_update_steer_strength(d.index, d.position)
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		var m := event as InputEventMouseButton
 		if m.device == InputEvent.DEVICE_ID_EMULATION:
 			return  # ratón emulado a partir de un toque: ya lo hemos tratado
 		_assign(MOUSE_ID, _button_at(m.position) if m.pressed else "")
+
+
+## Dirección analógica en táctil: en el borde exterior del botón se gira a fondo y
+## hacia el interior (hacia el otro botón) se gira menos. Permite trazar curvas con
+## agarre sin derrapar, y derrapar a propósito llevando el pulgar hacia fuera.
+const STEER_MIN := 0.45
+
+func _update_steer_strength(finger: int, pos: Vector2) -> void:
+	var id: String = _touch_to_button.get(finger, "")
+	if not (id in ["left", "right"]):
+		return
+	for b in buttons:
+		if b["id"] != id:
+			continue
+		var c := _btn_center(b)
+		var r := _btn_radius(b)
+		var outward := (c.x - pos.x) / r if id == "left" else (pos.x - c.x) / r
+		var strength := clampf(lerpf(STEER_MIN, 1.0, (outward + 0.6) / 1.2), STEER_MIN, 1.0)
+		_strength[id] = strength
+		Input.action_press(b["action"], strength)
+		queue_redraw()
 
 
 func _assign(finger: int, id: String) -> void:
@@ -108,6 +131,7 @@ func _set_button(id: String, down: bool) -> void:
 			Input.action_press(action, 1.0)
 		else:
 			Input.action_release(action)
+			_strength.erase(id)
 
 
 func release_all() -> void:
@@ -139,6 +163,11 @@ func _draw() -> void:
 			var pts := PackedVector2Array([c + Vector2(sx * r * 0.45, 0), c + Vector2(-sx * r * 0.3, -r * 0.4),
 					c + Vector2(-sx * r * 0.3, r * 0.4)])
 			draw_colored_polygon(pts, Color(1, 1, 1, 0.95))
+			# Intensidad del giro (táctil analógico): arco amarillo
+			if down:
+				var st: float = _strength.get(b["id"], 1.0)
+				draw_arc(c, r * 1.12, -PI * 0.5 - st * PI * 0.5, -PI * 0.5 + st * PI * 0.5, 24,
+						Color(1.0, 0.85, 0.2, 0.9), maxf(3.0, r * 0.08), true)
 			continue
 		var label: String = b["label"]
 		var fs := int(r * (0.9 if label.length() <= 2 else 0.36))

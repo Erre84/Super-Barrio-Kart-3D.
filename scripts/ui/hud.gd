@@ -17,6 +17,7 @@ var _hint_label: Label
 var _speedo: Speedo
 var _turbo: TurboBar
 var _minimap: Minimap
+var drift_meter: DriftMeter
 var _pause_panel: PanelContainer
 var _msg_time := 0.0
 
@@ -52,9 +53,56 @@ class Speedo extends Control:
 		var ts2 := font.get_string_size(unit, HORIZONTAL_ALIGNMENT_CENTER, -1, fs2)
 		draw_string(font, c + Vector2(-ts2.x * 0.5, fs * 0.3 + fs2 * 1.2), unit, HORIZONTAL_ALIGNMENT_CENTER, -1, fs2, Color(1, 1, 1, 0.85))
 		if drift_level > 0:
-			var dc: Color = [Color("3fa9ff"), Color("ff8c1a"), Color("c75cff")][drift_level - 1]
+			var dc: Color = [Color("3fa9ff"), Color("ff8c1a"), Color("c75cff")][clampi(drift_level, 1, 3) - 1]
 			for i in drift_level:
 				draw_circle(c + Vector2((i - (drift_level - 1) * 0.5) * r * 0.28, -r * 0.62), r * 0.09, dc)
+
+
+## Indicador de derrape (v0.3): barra que se llena mientras derrapas (azul → naranja
+## → morado) y, al enderezar un derrape válido, aviso "¡SUELTA Y PISA!" con la
+## ventana de tiempo que se agota.
+class DriftMeter extends Control:
+	const COLS := [Color("3fa9ff"), Color("ff8c1a"), Color("c75cff")]
+	var state := 0          # 0 nada, 1 derrapando, 2 ventana
+	var drift_time := 0.0
+	var levels: Array[float] = [0.75, 1.25, 1.9]
+	var level := 0
+	var window_frac := 0.0
+	var slip_deg := 0.0
+	var t := 0.0
+
+	func _draw() -> void:
+		if state == 0:
+			return
+		var font := get_theme_default_font()
+		var w := size.x
+		var h := 16.0
+		var y := size.y - h
+		if state == 1:
+			draw_rect(Rect2(0, y, w, h), Color(0, 0, 0, 0.5))
+			var maxt: float = levels[levels.size() - 1] * 1.15
+			for i in levels.size():
+				var x0: float = (0.0 if i == 0 else levels[i - 1]) / maxt * w
+				var x1: float = minf(drift_time, levels[i]) / maxt * w
+				if x1 > x0:
+					draw_rect(Rect2(x0, y + 2, x1 - x0, h - 4), COLS[i])
+				draw_line(Vector2(levels[i] / maxt * w, y - 3), Vector2(levels[i] / maxt * w, y + h + 3), Color.WHITE, 2.0)
+			var txt := "DERRAPE  %d°" % int(slip_deg)
+			if level == 0:
+				txt += "  (aguanta…)"
+			draw_string_outline(font, Vector2(0, y - 8), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 6, Color(0, 0, 0, 0.8))
+			draw_string(font, Vector2(0, y - 8), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, COLS[maxi(level - 1, 0)] if level > 0 else Color.WHITE)
+		else:
+			var pulse := 0.75 + 0.25 * sin(t * 28.0)
+			var col: Color = COLS[clampi(level - 1, 0, 2)]
+			draw_rect(Rect2(0, y, w, h), Color(0, 0, 0, 0.5))
+			draw_rect(Rect2(2, y + 2, (w - 4) * window_frac, h - 4), Color(1.0, 0.85, 0.15))
+			var txt2 := "¡SUELTA Y PISA!"
+			var fs := 34
+			var ts := font.get_string_size(txt2, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
+			var p := Vector2((w - ts.x) * 0.5, y - 10)
+			draw_string_outline(font, p, txt2, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, 8, Color(0, 0, 0, 0.85))
+			draw_string(font, p, txt2, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, Color(col.lightened(0.3), pulse))
 
 
 class TurboBar extends Control:
@@ -137,6 +185,11 @@ func _ready() -> void:
 	_place(_speedo, Control.PRESET_BOTTOM_RIGHT, Vector2(-260, -196), Vector2(240, 150))
 	root.add_child(_speedo)
 
+	drift_meter = DriftMeter.new()
+	drift_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(drift_meter, Control.PRESET_CENTER_BOTTOM, Vector2(-200, -150), Vector2(400, 70))
+	root.add_child(drift_meter)
+
 	_turbo = TurboBar.new()
 	_turbo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(_turbo, Control.PRESET_BOTTOM_RIGHT, Vector2(-250, -44), Vector2(220, 28))
@@ -150,9 +203,10 @@ func _ready() -> void:
 	_place(_sub_label, Control.PRESET_CENTER, Vector2(-450, -60), Vector2(900, 50))
 
 	_hint_label = _label(root, 17, Color(1, 1, 1, 0.85))
-	_place(_hint_label, Control.PRESET_BOTTOM_LEFT, Vector2(20, -100), Vector2(520, 90))
+	_place(_hint_label, Control.PRESET_BOTTOM_LEFT, Vector2(20, -122), Vector2(640, 112))
 	_hint_label.text = ("W/↑ acelerar · S/↓ frenar/atrás · A D/← → girar\n"
-			+ "Espacio/Shift derrapar · E turbo · Q mirar atrás\n"
+			+ "Gira fuerte a velocidad para derrapar · contravolante para enderezar\n"
+			+ "Al enderezar: suelta y pisa el acelerador = mini-turbo · E turbo · Q atrás\n"
 			+ "R reaparecer · Esc pausa · F3 controles táctiles")
 
 	_pause_panel = PanelContainer.new()
@@ -247,6 +301,19 @@ func update_kart(kmh: float, turbo: float, drift_level: int, boosting: bool, pos
 	_minimap.kart_pos = Vector2(pos.x, pos.z)
 	_minimap.kart_dir = Vector2(dir.x, dir.z)
 	_minimap.queue_redraw()
+
+
+## Estado del derrape para el indicador (llamado cada fotograma por la carrera).
+func update_drift(state: int, drift_time: float, level: int, window_left: float, window_total: float,
+		slip_deg: float, levels: Array[float]) -> void:
+	drift_meter.state = state
+	drift_meter.drift_time = drift_time
+	drift_meter.level = level
+	drift_meter.window_frac = clampf(window_left / maxf(window_total, 0.01), 0.0, 1.0)
+	drift_meter.slip_deg = slip_deg
+	drift_meter.levels = levels
+	drift_meter.t += get_process_delta_time()
+	drift_meter.queue_redraw()
 
 
 func show_message(text: String, sub: String = "", seconds: float = 1.5, col: Color = Color("ffd23f")) -> void:

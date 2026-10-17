@@ -10,8 +10,8 @@ static func setup() -> void:
 	_action("brake", [KEY_S, KEY_DOWN], [JOY_BUTTON_B], [[JOY_AXIS_TRIGGER_LEFT, 1.0]])
 	_action("steer_left", [KEY_A, KEY_LEFT], [JOY_BUTTON_DPAD_LEFT], [[JOY_AXIS_LEFT_X, -1.0]])
 	_action("steer_right", [KEY_D, KEY_RIGHT], [JOY_BUTTON_DPAD_RIGHT], [[JOY_AXIS_LEFT_X, 1.0]])
-	_action("drift", [KEY_SPACE, KEY_SHIFT], [JOY_BUTTON_RIGHT_SHOULDER, JOY_BUTTON_LEFT_SHOULDER], [])
-	_action("turbo", [KEY_E, KEY_CTRL], [JOY_BUTTON_X], [])
+	# v0.3: no hay botón de derrape. El derrape sale de perder adherencia al girar.
+	_action("turbo", [KEY_E, KEY_SPACE], [JOY_BUTTON_X, JOY_BUTTON_RIGHT_SHOULDER], [])
 	_action("look_back", [KEY_Q, KEY_C], [JOY_BUTTON_Y], [])
 	_action("reset", [KEY_R], [JOY_BUTTON_BACK], [])
 	_action("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START], [])

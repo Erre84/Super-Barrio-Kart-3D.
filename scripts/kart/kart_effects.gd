@@ -6,6 +6,10 @@ extends Node3D
 ##  - Turbo: llamas cónicas parpadeantes en los escapes + partículas de fuego.
 ##  - Polvo al pisar tierra.
 ##  - Sombra de contacto bajo el kart (asienta el kart en el suelo).
+##  - (v0.3) Marcas de goma en el asfalto mientras se desliza o se frena fuerte.
+##  - (v0.3) Humo proporcional a la deriva.
+##  - (v0.3) Anillo amarillo bajo el kart mientras está abierta la ventana del
+##    mini-turbo ("¡suelta y pisa!") y onda expansiva al conseguirlo.
 
 const SMOKE_MATERIAL := preload("res://materials/smoke.tres")
 const LEVEL_COLORS := [Color(1, 1, 1), Color("3fa9ff"), Color("ff8c1a"), Color("c75cff")]
@@ -22,6 +26,15 @@ var _dust: CPUParticles3D
 var _shadow: MeshInstance3D
 var _t := 0.0
 
+const SKID_MAX := 700
+var _skid: MultiMesh
+var _skid_next := 0
+var _skid_total := 0
+var _skid_last: Array[Vector3] = []
+var _skid_on: Array[bool] = []
+var _window_ring: MeshInstance3D
+var _bursts: Array = []     # [MeshInstance3D, edad]
+
 static var _radial_tex: ImageTexture
 
 
@@ -29,6 +42,10 @@ func setup(k: CharacterBody3D) -> void:
 	kart = k
 	model = k.model
 	_build()
+	_build_skids()
+	_build_drift_cues()
+	if kart.has_signal("drift_event"):
+		kart.drift_event.connect(_on_drift_event)
 
 
 ## Textura radial suave generada por código (destellos y sombra de contacto).
@@ -234,6 +251,100 @@ func _build() -> void:
 	add_child(_shadow)
 
 
+func _build_skids() -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1, 1)
+	quad.orientation = PlaneMesh.FACE_Y
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.render_priority = 1
+	quad.material = m
+	_skid = MultiMesh.new()
+	_skid.transform_format = MultiMesh.TRANSFORM_3D
+	_skid.use_colors = true
+	_skid.mesh = quad
+	_skid.instance_count = SKID_MAX
+	_skid.visible_instance_count = 0
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "SkidMarks"
+	mmi.multimesh = _skid
+	mmi.top_level = true
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	mmi.global_transform = Transform3D.IDENTITY
+	for p in model.rear_wheel_points:
+		_skid_last.append(Vector3.ZERO)
+		_skid_on.append(false)
+
+
+func _build_drift_cues() -> void:
+	var ring := TorusMesh.new()
+	ring.inner_radius = 1.55
+	ring.outer_radius = 1.75
+	ring.rings = 20
+	ring.ring_segments = 4
+	ring.material = _unshaded(Color(1.0, 0.85, 0.15, 0.85), true)
+	_window_ring = MeshInstance3D.new()
+	_window_ring.mesh = ring
+	_window_ring.visible = false
+	_window_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_window_ring.position = Vector3(0, 0.12, 0.1)
+	_window_ring.scale = Vector3(1, 0.15, 1.2)
+	model.add_child(_window_ring)
+
+
+func _on_drift_event(kind: String, level: int) -> void:
+	if kind != "success":
+		return
+	# Onda expansiva del color del nivel + destello
+	var col: Color = LEVEL_COLORS[clampi(level, 1, 3)]
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.8
+	ring.outer_radius = 1.05
+	ring.rings = 20
+	ring.ring_segments = 4
+	ring.material = _unshaded(Color(col, 1.0), true)
+	var mi := MeshInstance3D.new()
+	mi.mesh = ring
+	mi.top_level = true
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	mi.global_position = kart.global_position + Vector3(0, 0.5, 0) + kart.global_transform.basis.z * 1.2
+	mi.global_rotation = Vector3(PI * 0.5, kart.global_rotation.y, 0)
+	_bursts.append([mi, 0.0])
+
+
+func _skid_add(a: Vector3, b: Vector3, alpha: float) -> void:
+	var d := b - a
+	var len := d.length()
+	if len < 0.01:
+		return
+	var basis := Basis.looking_at(d / len, Vector3.UP).scaled(Vector3(0.3, 1.0, len + 0.04))
+	_skid.set_instance_transform(_skid_next, Transform3D(basis, (a + b) * 0.5))
+	_skid.set_instance_color(_skid_next, Color(0.06, 0.06, 0.07, alpha))
+	_skid_next = (_skid_next + 1) % SKID_MAX
+	_skid_total += 1
+	_skid.visible_instance_count = mini(_skid_total, SKID_MAX)
+
+
+func _update_skids(marking: float) -> void:
+	for i in model.rear_wheel_points.size():
+		var p: Vector3 = model.global_transform * model.rear_wheel_points[i]
+		p.y = 0.065
+		if marking > 0.05:
+			if _skid_on[i]:
+				if p.distance_to(_skid_last[i]) > 0.35:
+					_skid_add(_skid_last[i], p, clampf(0.25 + marking * 0.45, 0.0, 0.7))
+					_skid_last[i] = p
+			else:
+				_skid_on[i] = true
+				_skid_last[i] = p
+		else:
+			_skid_on[i] = false
+
+
 func _process(delta: float) -> void:
 	if kart == null:
 		return
@@ -244,12 +355,36 @@ func _process(delta: float) -> void:
 	var lvl: int = kart.drift_level
 	var drifting: bool = kart.drifting
 
-	# Humo: derrapando, frenando fuerte o patinando de lado
-	var slip := absf(planar.dot(kart.global_transform.basis.x))
+	# Humo y marcas de goma: proporcionales a la deriva (y al frenar fuerte)
+	var slide: float = kart.slide_amount if "slide_amount" in kart else (1.0 if drifting else 0.0)
 	var hard_brake: bool = kart.braking_input > 0.5 and kart.forward_speed > 8.0
-	var smoking: bool = grounded and kart.on_road and (drifting or hard_brake or slip > 4.5)
+	var intensity: float = slide
+	if hard_brake:
+		intensity = maxf(intensity, 0.5)
+	if not (grounded and kart.on_road and spd > 5.0):
+		intensity = 0.0
 	for p in _smoke:
-		p.emitting = smoking
+		p.emitting = intensity > 0.12
+		p.color = Color(1, 1, 1, clampf(0.35 + intensity * 0.8, 0.0, 1.0))
+		p.scale_amount_min = 0.4 + intensity * 0.5
+		p.scale_amount_max = 0.8 + intensity * 0.9
+	_update_skids(intensity if (slide > 0.2 or hard_brake) else 0.0)
+
+	# Ventana del mini-turbo: anillo amarillo que late bajo el kart
+	var window_open: bool = "window_left" in kart and kart.window_left > 0.0 and kart.drift_state == 2
+	_window_ring.visible = window_open
+	if window_open:
+		var pulse := 1.0 + 0.12 * sin(_t * 30.0)
+		_window_ring.scale = Vector3(pulse, 0.15, 1.2 * pulse)
+	for b in _bursts:
+		b[1] += delta
+		var mi: MeshInstance3D = b[0]
+		var k: float = b[1] / 0.4
+		mi.scale = Vector3.ONE * (1.0 + k * 3.5)
+		(mi.mesh.surface_get_material(0) as StandardMaterial3D).albedo_color.a = clampf(1.0 - k, 0.0, 1.0)
+		if k >= 1.0:
+			mi.queue_free()
+	_bursts = _bursts.filter(func(b): return b[1] < 0.4)
 
 	# Chispas y destellos con el color del nivel de mini-turbo
 	var col: Color = LEVEL_COLORS[clampi(lvl, 0, 3)]

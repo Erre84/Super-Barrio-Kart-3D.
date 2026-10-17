@@ -4,6 +4,10 @@ Arcade de karts **poligonal** para **PC y Android**, hecho con **Godot 4** y **G
 Proyecto independiente que sucede a *Super Barrio Kart v16* (2D): mismo concepto, ambiente
 urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
+> **Versión 0.3.0: derrape natural.** Sin botón de derrape: el kart derrapa al perder
+> adherencia y el mini-turbo se gana enderezando y soltando y pisando el acelerador
+> ([`docs/DERRAPE.md`](docs/DERRAPE.md)).
+>
 > **Versión 0.2.0.** Un circuito, un kart y un piloto, ya pulidos: conducción con derrape
 > progresivo y contravolante, modelos 3D rehechos, iluminación nueva y un El Prat con
 > lugares reconocibles. Todavía no hay rivales, ni objetos ni el resto de personajes.
@@ -60,8 +64,7 @@ godot --path . -- --touch          # jugar mostrando los controles táctiles en 
 | Acelerar | `W` / `↑` | `A` / `✕` o gatillo `RT` / `R2` | ACEL |
 | Frenar / marcha atrás | `S` / `↓` | `B` / `○` o gatillo `LT` / `L2` | FRENO |
 | Girar | `A` `D` / `←` `→` | Stick izquierdo (analógico) o cruceta | ◀ ▶ |
-| Derrapar (saltito) | `Espacio` / `Shift` | `RB` / `R1` o `LB` / `L1` | DERRAPE |
-| Turbo | `E` / `Ctrl` | `X` / `□` | TURBO |
+| Turbo | `E` / `Espacio` | `X` / `□` o `RB` / `R1` | TURBO |
 | Mirar atrás | `Q` / `C` | `Y` / `△` | ATRÁS |
 | Reaparecer en pista | `R` | `Back` / `Select` | — |
 | Pausa | `Esc` / `P` | `Start` | II |
@@ -75,11 +78,12 @@ teclado español, francés, etc.
 
 - **Girar** solo hace lo que tú indicas. A más velocidad el giro es algo menos brusco, pero
   nunca hay corrección automática.
-- **Derrape:** pulsa derrape y gira (o gira y pulsa). El kart da un saltito y el derrape
-  se va asentando en unas décimas. Mientras derrapas, girar **hacia** la curva la cierra y
-  **contravolante** (hacia fuera) la abre sin perder el derrape.
-  Cuanto más aguantes, más carga:
-  azul (~1 s) → naranja (~2 s) → morado (~3 s). Suelta para el **mini-turbo**.
+- **Derrape natural (sin botón):** a más de ~60 km/h, un **volantazo a fondo** hace que las
+  ruedas pierdan agarre y el kart se cruce, también en recta. Mantén el volante para
+  sostenerlo (azul → naranja → morado) y **contravolantea** para enderezar.
+- **Mini-turbo:** al quedar recto suena una campanita y aparece **"¡SUELTA Y PISA!"**:
+  suelta el acelerador y vuelve a pisarlo en menos de medio segundo. Se puede encadenar.
+  Guía completa: [`docs/DERRAPE.md`](docs/DERRAPE.md).
 - **Turbo:** la barra se recarga sola (≈9 s) y los mini-turbos la rellenan un poco.
 - **Salida perfecta:** acelera justo cuando la cuenta atrás va a llegar a 0.
 - **Pads naranjas** con flechas: aceleradores.
@@ -99,7 +103,8 @@ materials/                 Materiales low-poly (color por vértice, luminoso, pa
 scripts/
   core/input_setup.gd      Mapa de controles (teclado + mando) registrado por código
   core/mesh_builder.gd     Generador de mallas low-poly facetadas
-  kart/kart.gd             Física arcade, derrape, turbos, colisiones
+  kart/kart.gd             Física arcade: adherencia, derrape natural, mini-turbo, choques
+  kart/kart_audio.gd       Sonido sintetizado: motor, chirrido, avisos, impulso
   kart/kart_model.gd       Modelo 3D del kart y del piloto chibi + animaciones
   kart/kart_effects.gd     Humo, chispas, llamas, polvo y sombra de contacto
   kart/chase_camera.gd     Cámara trasera y "mirar atrás"
@@ -119,6 +124,7 @@ tools/run_tests.sh         Ejecuta todas las pruebas
 docs/PRUEBAS.md            Qué se ha probado, resultados y lista para probarlo tú
 docs/MEJORAS_v0.2.md       Qué ha mejorado en la v0.2 y qué sigue pendiente
 docs/ANDROID.md            Cómo instalar el APK de prueba
+docs/DERRAPE.md            Técnica de derrape y mini-turbo, parámetros y valores medidos
 .github/workflows/         Pruebas automáticas y compilación del APK en GitHub Actions
 ```
 

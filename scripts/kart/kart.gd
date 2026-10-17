@@ -1,27 +1,46 @@
 extends CharacterBody3D
-## Kart del jugador: conducción arcade.
+## Kart del jugador: conducción arcade con DERRAPE NATURAL (v0.3).
 ##
-## Filosofía de manejo (v0.2):
-##  - La dirección SOLO cambia por la entrada del jugador. No hay asistencia que
-##    enderece el kart, ni lo alinee con la carretera, ni frene antes de las curvas.
-##  - Volante con tres velocidades distintas: al girar, al soltar (vuelve rápido al
-##    centro) y al cambiar de lado (más rápido aún, para corregir con precisión).
-##    Con stick analógico la respuesta es directa.
-##  - Derrape progresivo: al entrar, el ángulo de deslizamiento y el giro crecen
-##    durante `drift_entry_time` en vez de aparecer de golpe. Durante el derrape:
-##      · girar HACIA la curva la cierra y aumenta el ángulo,
-##      · CONTRAVOLANTE la abre y reduce el ángulo (sin salir del derrape).
-##  - Mini-turbo de tres niveles al soltar el derrape; turbo con barra; pads.
+## No hay botón de derrape. El kart derrapa cuando los neumáticos no pueden dar la
+## fuerza lateral que pide el giro:
 ##
-## Todos los parámetros son @export: se ajustan desde el inspector del nodo Kart.
+##  1. El volante marca una velocidad de giro objetivo. La carrocería la sigue con
+##     inercia (`yaw_response`), más lenta cuando desliza (`yaw_response_slide`).
+##  2. Al girar, la velocidad conserva su dirección (inercia) y aparece velocidad
+##     LATERAL en coordenadas locales del kart. Los neumáticos la anulan, pero con
+##     un límite: `grip_peak` (m/s²). Si el giro pide más (velocidad × giro alto: un
+##     volantazo en recta a fondo, una curva cerrada a demasiada velocidad, frenar
+##     girando...), la deriva lateral crece de forma progresiva.
+##  3. El agarre depende del ángulo de deriva: máximo hasta `slip_peak_deg` y baja
+##     al agarre dinámico `grip_slide` a partir de `slip_full_deg`. Una vez cruzado,
+##     el kart conserva inercia lateral y tiende a cruzarse más (`oversteer`).
+##  4. Para recuperar, hay que CONTRAVOLANTEAR (o abrir dirección y dar gas): el
+##     morro vuelve hacia la trayectoria, la deriva baja y el agarre vuelve.
+##
+## Mini-turbo por maniobra (sin botón):
+##  - Derrape válido: deriva > `drift_enter_deg` durante al menos `drift_min_time`,
+##    sin trompo (> `drift_spin_deg`), sin choque fuerte y sin quedarse lento.
+##  - Enderezar: deriva < `drift_recover_deg` durante `drift_recover_hold` s.
+##  - Después hay una ventana de `boost_window` s para SOLTAR el acelerador y
+##    VOLVER A PISARLO. Si sale bien, mini-turbo (más largo cuanto más duró el
+##    derrape). Si no, nada. Pisar repetidamente sin derrape válido no da nada:
+##    cada derrape válido abre UNA ventana con UN intento.
+##
+## Nada gira, endereza ni frena el kart por el jugador. Todo es @export.
 
 signal wall_hit(strength: float)
 signal boost_started(kind: String)
 signal drift_level_changed(level: int)
 signal landed(impact: float)
+## "slide" (empieza), "window" (enderezado: suelta y pisa), "success",
+## y fallos: "fail_short", "fail_spin", "fail_wall", "fail_slow", "fail_late", "fail_lift", "fail_new_slide"
+signal drift_event(kind: String, level: int)
 
 const KartModel := preload("res://scripts/kart/kart_model.gd")
 const KartEffects := preload("res://scripts/kart/kart_effects.gd")
+const KartAudio := preload("res://scripts/kart/kart_audio.gd")
+
+enum DriftState { NONE, SLIDING, WINDOW }
 
 @export_group("Motor")
 @export var max_speed := 29.0          ## m/s (≈105 km/h)
@@ -33,30 +52,43 @@ const KartEffects := preload("res://scripts/kart/kart_effects.gd")
 @export var coast_decel := 4.0         ## m/s² sin acelerar ni frenar (rozamiento, NO freno automático)
 
 @export_group("Dirección")
-@export var turn_speed := 2.15         ## rad/s con el volante a fondo
+@export var turn_speed := 2.15         ## rad/s de giro con el volante a fondo
 @export var full_steer_speed := 5.0    ## m/s a partir de los que el giro es completo
-@export var high_speed_steer := 0.52   ## fracción de giro a velocidad punta
-@export var steer_press_rate := 8.5    ## volante (teclado/botón): rapidez al girar (1/s)
+@export var high_speed_steer := 0.62   ## fracción de giro a velocidad punta
+@export var steer_press_rate := 8.5    ## volante digital: rapidez al girar (1/s)
 @export var steer_release_rate := 14.0 ## rapidez al soltar (vuelve al centro)
-@export var steer_reverse_rate := 18.0 ## rapidez al cambiar de lado
-@export var grip := 11.0               ## agarre lateral (1/s): más = más preciso
-@export var corner_speed_keep := 0.75  ## velocidad que se conserva al girar con gas (0-1)
+@export var steer_reverse_rate := 18.0 ## rapidez al cambiar de lado (contravolante)
+@export var yaw_response := 14.0       ## rapidez con la que el giro sigue al volante con agarre (1/s)
+@export var yaw_response_slide := 4.5  ## ... mientras desliza (la carrocería tiene inercia)
 
-@export_group("Derrape")
-@export var drift_min_speed := 10.0    ## m/s mínimos para entrar en derrape
-@export var hop_velocity := 3.4        ## saltito al pulsar derrape
-@export var drift_entry_time := 0.3    ## s que tarda el derrape en "asentarse"
-@export var drift_turn_base := 0.72    ## giro en derrape sin tocar el volante (× turn_speed)
-@export var drift_turn_range := 0.45   ## cuánto cierra (+) o abre (−) el volante en derrape
-@export var drift_slip_min := 0.16     ## rad de deslizamiento con contravolante a fondo
-@export var drift_slip_max := 0.48     ## rad de deslizamiento cerrando a fondo
-@export var drift_slip_rate := 1.6     ## rad/s a los que cambia el ángulo de deslizamiento
-@export var drift_align := 7.0         ## rapidez con la que la trayectoria sigue al ángulo objetivo
-@export var drift_friction := 1.2      ## m/s² que cuesta derrapar
-@export var drift_grip := 2.4          ## agarre lateral si se derrapa en el aire
-@export var drift_charge_into := 0.55  ## carga extra del mini-turbo cerrando la curva
-@export var mini_turbo_levels: Array[float] = [0.9, 1.9, 3.0]  ## s de carga por nivel
-@export var mini_turbo_time: Array[float] = [0.65, 1.1, 1.6]   ## s de turbo por nivel
+@export_group("Adherencia")
+@export var grip_peak := 27.0          ## aceleración lateral máxima con agarre (m/s²)
+@export var grip_slide := 15.0         ## agarre dinámico al deslizar (m/s²): inercia lateral
+@export var slip_peak_deg := 4.0       ## deriva hasta la que el agarre es máximo
+@export var slip_full_deg := 14.0      ## deriva a partir de la que el agarre es el dinámico
+@export var slide_min_speed := 11.0    ## por debajo de esta velocidad (m/s) no se pierde adherencia
+@export var slide_steer := 0.45        ## autoridad del volante mientras desliza (contravolante incluido)
+@export var oversteer := 2.5           ## tendencia a cruzarse mientras desliza (rad/s²)
+@export var drift_angle_target := 30.0 ## deriva de equilibrio con el volante a fondo (°): por encima, se frena el cruce
+@export var flick_grip_loss := 0.45    ## agarre perdido como máximo por un volantazo (transferencia de peso)
+@export var flick_sensitivity := 0.045 ## cuánto agarre quita cada rad/s² de aceleración de giro
+@export var brake_grip_loss := 0.35    ## agarre perdido frenando a fondo (0-1): frenar girando cruza el kart
+@export var slide_drag := 2.5          ## m/s² de velocidad perdida a deriva completa
+@export var offroad_grip := 0.7        ## multiplicador de agarre en tierra
+@export var air_grip := 0.1            ## multiplicador de agarre en el aire
+
+@export_group("Mini-turbo por derrape")
+@export var drift_enter_deg := 11.0    ## deriva que cuenta como derrape
+@export var drift_recover_deg := 5.0   ## deriva por debajo de la cual el kart está enderezado
+@export var drift_recover_hold := 0.08 ## s que hay que mantenerlo enderezado
+@export var drift_spin_deg := 85.0     ## deriva que se considera trompo (derrape inválido)
+@export var drift_min_time := 0.75     ## s mínimos de derrape para que sea válido
+@export var drift_level_times: Array[float] = [0.75, 1.25, 1.9]  ## s de derrape por nivel
+@export var mini_turbo_time: Array[float] = [0.55, 0.85, 1.2]   ## s de impulso por nivel
+@export var mini_turbo_speed_mult := 1.18  ## punta durante el mini-turbo (× max_speed)
+@export var boost_window := 0.45       ## s tras enderezar para soltar y volver a pisar
+@export var release_grace := 0.2       ## s antes de enderezar en los que ya cuenta haber soltado
+@export var lift_min := 0.04           ## s mínimos con el acelerador suelto
 
 @export_group("Turbo")
 @export var boost_speed_mult := 1.32
@@ -76,30 +108,55 @@ const GRAVITY := 24.0
 
 var model: KartModel
 var effects: KartEffects
+var audio: KartAudio
 var track: Node = null
 var controls_enabled := false
+## Entrada inyectable (pruebas): si no está vacía sustituye a Input.
+var input_override := {}
 
-# Estado público (lo leen la cámara, el HUD, los efectos y las pruebas)
+# --- Estado público (cámara, HUD, efectos, audio y pruebas) ---
 var steer_value := 0.0
 var forward_speed := 0.0
-var yaw_rate := 0.0
-var drifting := false
-var drift_dir := 0
+var lateral_speed := 0.0      ## m/s de velocidad lateral local (+ hacia la derecha del kart)
+var yaw_rate := 0.0           ## rad/s (+ = izquierda)
+var slip_angle := 0.0         ## rad, con signo: + = el morro apunta a la izquierda de la trayectoria
+var slide_amount := 0.0       ## 0 = agarre total, 1 = deslizando del todo
+var throttle_input := 0.0
+var braking_input := 0.0
+var drift_state := DriftState.NONE
 var drift_time := 0.0
-var drift_slip := 0.0        ## ángulo actual (rad) entre morro y trayectoria
-var drift_charge := 0.0
 var drift_level := 0
+var drift_peak_deg := 0.0
+var window_left := 0.0
 var boost_time := 0.0
 var turbo_meter := 1.0
 var on_road := true
-var braking_input := 0.0
 var track_info := {}
 var last_impact := 0.0
 var airborne_time := 0.0
+var mini_turbos := 0          ## contador (estadísticas y pruebas)
 
+# Compatibilidad con el modelo/efectos: "drifting" = derrape en curso
+var drifting: bool:
+	get: return drift_state == DriftState.SLIDING
+var drift_dir: int:
+	get: return 0 if absf(slip_angle) < 0.01 else (-1 if slip_angle > 0.0 else 1)
+var drift_slip: float:
+	get: return absf(slip_angle)
+
+var _boost_mult := 1.0
 var _pad_cooldown := 0.0
 var _was_on_floor := true
 var _fall_speed := 0.0
+var _time := 0.0
+var _recover_t := 0.0
+var _lifted := false
+var _lift_start := -10.0
+var _window_released := false
+var _window_release_t := 0.0
+var _window_open_t := 0.0
+var _spun := false
+var _flick := 0.0
 
 
 func _ready() -> void:
@@ -121,11 +178,21 @@ func _ready() -> void:
 	effects.name = "Effects"
 	add_child(effects)
 	effects.setup(self)
+	audio = KartAudio.new()
+	audio.name = "Audio"
+	add_child(audio)
+	audio.setup(self)
 	landed.connect(func(impact: float): model.bump(impact))
 	wall_hit.connect(func(strength: float): model.bump(clampf(strength / 30.0, 0.0, 0.6)))
 
 
 # --- Entrada --------------------------------------------------------------------
+
+func _in_strength(action: String) -> float:
+	if not input_override.is_empty():
+		return float(input_override.get(action, 0.0))
+	return Input.get_action_strength(action)
+
 
 func _update_steering(steer_in: float, delta: float) -> void:
 	var digital := absf(steer_in) > 0.99 or absf(steer_in) < 0.01
@@ -140,36 +207,36 @@ func _update_steering(steer_in: float, delta: float) -> void:
 	steer_value = move_toward(steer_value, steer_in, rate * delta)
 
 
+## Agarre lateral disponible (m/s²) según el ángulo de deriva.
+func grip_at(slip_deg: float) -> float:
+	var t := smoothstep(slip_peak_deg, slip_full_deg, slip_deg)
+	return lerpf(grip_peak, grip_slide, t)
+
+
 # --- Bucle principal ------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	_time += delta
 	var throttle := 0.0
 	var braking := 0.0
 	var steer_in := 0.0
-	var drift_held := false
-	var drift_pressed := false
 	if controls_enabled:
-		throttle = Input.get_action_strength("accelerate")
-		braking = Input.get_action_strength("brake")
-		steer_in = Input.get_axis("steer_left", "steer_right")
-		drift_held = Input.is_action_pressed("drift")
-		drift_pressed = Input.is_action_just_pressed("drift")
-		if Input.is_action_just_pressed("turbo"):
-			try_turbo()
-		if Input.is_action_just_pressed("reset"):
-			respawn()
-			return
+		throttle = _in_strength("accelerate")
+		braking = _in_strength("brake")
+		steer_in = _in_strength("steer_right") - _in_strength("steer_left")
+		if input_override.is_empty():
+			if Input.is_action_just_pressed("turbo"):
+				try_turbo()
+			if Input.is_action_just_pressed("reset"):
+				respawn()
+				return
+	throttle_input = throttle
 	braking_input = braking
-	_update_steering(steer_in, delta)
+	_update_steering(clampf(steer_in, -1.0, 1.0), delta)
 
-	var fwd := -global_transform.basis.z
-	fwd.y = 0.0
-	fwd = fwd.normalized()
-	var right := Vector3(-fwd.z, 0.0, fwd.x)
+	var grounded := is_on_floor()
 	var planar := Vector3(velocity.x, 0.0, velocity.z)
-	var f := planar.dot(fwd)
-	var l := planar.dot(right)
-	var speed_before := planar.length()
+	var speed := planar.length()
 
 	# Superficie
 	if track != null:
@@ -177,16 +244,48 @@ func _physics_process(delta: float) -> void:
 		on_road = track_info.get("on_road", true)
 	var top := max_speed
 	if boost_time > 0.0:
-		top *= boost_speed_mult
+		top *= _boost_mult
 	elif not on_road:
 		top *= offroad_speed_mult
 
-	# --- Motor y frenos (solo con ruedas en el suelo). Sin freno automático. ---
-	var grounded := is_on_floor()
+	# --- 1. Giro: la carrocería sigue al volante con inercia ---
+	var fwd := -global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var f := planar.dot(fwd)
+	var speed_ratio := clampf(absf(f) / max_speed, 0.0, 1.0)
+	var authority := clampf(absf(f) / full_steer_speed, 0.0, 1.0) * lerpf(1.0, high_speed_steer, speed_ratio)
+	var dir_sign := 1.0 if f >= -0.5 else -1.0
+	var slip_deg := rad_to_deg(absf(slip_angle))
+	# La autoridad del volante baja solo con el derrape ya formado: la entrada es viva
+	var slide_scale := lerpf(1.0, slide_steer, smoothstep(slip_full_deg * 0.6, slip_full_deg * 1.6, slip_deg))
+	var yaw_target := -steer_value * turn_speed * authority * dir_sign * slide_scale
+	var resp := lerpf(yaw_response, yaw_response_slide, slide_amount)
+	if not grounded:
+		resp *= 0.4
+	var prev_yaw_rate := yaw_rate
+	yaw_rate = lerpf(yaw_rate, yaw_target, 1.0 - exp(-resp * delta))
+	# Volantazo: un cambio brusco de giro carga el peso de golpe y las ruedas pierden agarre
+	_flick = clampf(absf(yaw_rate - prev_yaw_rate) / delta * flick_sensitivity, 0.0, flick_grip_loss) * speed_ratio
+	# Sobreviraje: deslizando, el kart tiende a cruzarse más (hay que contravolantear)
+	if grounded and slide_amount > 0.0 and speed > slide_min_speed:
+		var push := clampf(1.0 - slip_deg / maxf(drift_angle_target, 1.0), -1.0, 1.0)
+		yaw_rate += signf(slip_angle) * oversteer * slide_amount * push * delta
+	rotate_y(yaw_rate * delta)
+
+	# --- 2. Velocidad en ejes locales tras girar: aquí nace la deriva lateral ---
+	fwd = -global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var right := Vector3(-fwd.z, 0.0, fwd.x)
+	f = planar.dot(fwd)
+	var l := planar.dot(right)
+
+	# --- 3. Motor y frenos (con ruedas en el suelo). Sin freno automático. ---
 	if grounded:
 		if throttle > 0.0 and braking < 0.5:
 			if f < -0.5:
-				f = minf(f + brake_decel * delta, 0.0)       # acelerar estando marcha atrás = frenar
+				f = minf(f + brake_decel * delta, 0.0)
 			elif f < top:
 				var ratio := maxf(f, 0.0) / top
 				f = minf(f + acceleration * throttle * (1.0 - accel_falloff * ratio * ratio) * delta, top)
@@ -202,86 +301,38 @@ func _physics_process(delta: float) -> void:
 		elif f > top:
 			f = move_toward(f, top, (offroad_drag if not on_road else 10.0) * delta)
 
-	# --- Derrape: entrada, mantenimiento y salida ---
-	if drift_pressed and grounded and absf(f) > 4.0:
-		velocity.y = hop_velocity
-		grounded = false
-	if not drifting and drift_held and grounded and absf(steer_value) > 0.35 and f > drift_min_speed:
-		_start_drift(1 if steer_value > 0.0 else -1, planar, fwd)
-	if drifting:
-		if not drift_held:
-			_release_drift()
-		elif f < drift_min_speed * 0.6:
-			_cancel_drift()
-		else:
-			drift_time += delta
-			if grounded:
-				var into := clampf(steer_value * drift_dir, 0.0, 1.0)
-				drift_charge += delta * (0.75 + drift_charge_into * into)
-				var lvl := 0
-				for i in mini_turbo_levels.size():
-					if drift_charge >= mini_turbo_levels[i]:
-						lvl = i + 1
-				if lvl != drift_level:
-					drift_level = lvl
-					drift_level_changed.emit(drift_level)
-
-	# --- Velocidad resultante ---
-	var new_planar: Vector3
-	if drifting and grounded:
-		# Velocidad conservada; la trayectoria va "por fuera" del morro con un ángulo
-		# que crece progresivamente hacia el objetivo marcado por el volante.
-		var s := steer_value * drift_dir                       # +1 cerrar, −1 contravolante
-		var slip_target := lerpf(drift_slip_min, drift_slip_max, (s + 1.0) * 0.5)
-		var entry := _drift_entry()
-		drift_slip = move_toward(drift_slip, slip_target * entry, drift_slip_rate * delta)
-		var spd := planar.length()
-		if throttle > 0.0:
-			var ratio := spd / top
-			spd = minf(spd + acceleration * throttle * (1.0 - accel_falloff * ratio * ratio) * delta, maxf(top, spd))
-		else:
-			spd = move_toward(spd, 0.0, coast_decel * delta)
-		spd = move_toward(spd, 0.0, drift_friction * delta)
-		if boost_time > 0.0:
-			spd = minf(spd + boost_accel * delta, top)
-		elif spd > top:
-			spd = move_toward(spd, top, 10.0 * delta)
-		var travel := fwd.rotated(Vector3.UP, drift_dir * drift_slip)
-		var cur_dir := planar.normalized() if planar.length() > 0.1 else fwd
-		var nd := cur_dir.slerp(travel, 1.0 - exp(-drift_align * delta)).normalized()
-		new_planar = nd * spd
-		f = new_planar.dot(fwd)
-	else:
-		if not drifting:
-			drift_slip = move_toward(drift_slip, 0.0, drift_slip_rate * 2.0 * delta)
-		var g := drift_grip if drifting else grip
-		if not grounded:
-			g *= 0.15
-		elif not on_road:
-			g *= 0.7
-		l *= exp(-g * delta)
-		new_planar = fwd * f + right * l
-		# El agarre "come" velocidad lateral; con gas conservamos parte (sensación arcade).
-		var target_len := lerpf(new_planar.length(), maxf(absf(f), speed_before), corner_speed_keep)
-		if new_planar.length() > 0.01 and grounded and throttle > 0.0:
-			new_planar = new_planar.normalized() * minf(target_len, maxf(top, absf(f)))
-	forward_speed = f
-
-	# --- Giro: solo por la entrada del jugador ---
-	var speed_ratio := clampf(absf(f) / max_speed, 0.0, 1.0)
-	var authority := clampf(absf(f) / full_steer_speed, 0.0, 1.0) * lerpf(1.0, high_speed_steer, speed_ratio)
-	var normal_yaw := -steer_value * turn_speed * authority * signf(f)
-	if drifting:
-		var s := steer_value * drift_dir
-		var drift_yaw := -drift_dir * turn_speed * (drift_turn_base + drift_turn_range * s)
-		yaw_rate = lerpf(normal_yaw, drift_yaw, _drift_entry())
-	else:
-		yaw_rate = normal_yaw
+	# --- 4. Neumáticos: anulan la velocidad lateral hasta su límite de agarre ---
+	slip_deg = rad_to_deg(atan2(absf(l), maxf(absf(f), 1.0)))
+	var grip := grip_at(slip_deg)
+	if speed < slide_min_speed:
+		grip = 1000.0                       # a baja velocidad el kart siempre agarra
+	grip *= 1.0 - brake_grip_loss * braking * clampf(speed / max_speed, 0.0, 1.0)
+	grip *= 1.0 - _flick
+	if not on_road:
+		grip *= offroad_grip
 	if not grounded:
-		yaw_rate *= 0.6
-	rotate_y(yaw_rate * delta)
+		grip *= air_grip
+	var need := absf(l) / delta
+	if need <= grip:
+		l = 0.0
+	else:
+		l -= signf(l) * grip * delta
+	# Deriva resultante y cuánto desliza (para física, efectos y sonido)
+	slip_deg = rad_to_deg(atan2(absf(l), maxf(absf(f), 1.0)))
+	slide_amount = smoothstep(slip_peak_deg * 0.5, slip_full_deg, slip_deg) if l != 0.0 else 0.0
+	# Deslizar cuesta velocidad
+	if slide_amount > 0.0 and grounded:
+		f = move_toward(f, 0.0, slide_drag * slide_amount * delta) if f > 0.0 else f
+	var new_planar := fwd * f + right * l
+	if boost_time <= 0.0 and new_planar.length() > top * 1.02 and on_road:
+		new_planar = new_planar.normalized() * move_toward(new_planar.length(), top, 10.0 * delta)
+	forward_speed = new_planar.dot(fwd)
+	lateral_speed = new_planar.dot(right)
+	slip_angle = 0.0 if new_planar.length() < 0.5 else -fwd.signed_angle_to(new_planar.normalized(), Vector3.UP)
+	if forward_speed < -0.5:
+		slip_angle = 0.0   # marcha atrás: sin derrapes
 
-	# --- Gravedad y movimiento ---
+	# --- 5. Gravedad y movimiento ---
 	velocity.x = new_planar.x
 	velocity.z = new_planar.z
 	if grounded and velocity.y <= 0.0:
@@ -293,7 +344,6 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_handle_collisions(pre_move)
 
-	# --- Aterrizaje (para el rebote visual) ---
 	var on_floor_now := is_on_floor()
 	if on_floor_now and not _was_on_floor:
 		landed.emit(clampf(-_fall_speed / 6.0, 0.0, 1.0))
@@ -302,21 +352,131 @@ func _physics_process(delta: float) -> void:
 		_fall_speed = 0.0
 	_was_on_floor = on_floor_now
 
+	# --- 6. Derrape y mini-turbo ---
+	_update_drift(delta, throttle, on_floor_now)
+
 	# --- Temporizadores ---
 	boost_time = maxf(boost_time - delta, 0.0)
 	turbo_meter = minf(turbo_meter + delta / turbo_recharge, 1.0)
 	_pad_cooldown = maxf(_pad_cooldown - delta, 0.0)
 	if track != null and _pad_cooldown <= 0.0 and track.is_on_boost_pad(global_position):
-		apply_boost(1.0, "pad")
+		apply_boost(1.0, "pad", boost_speed_mult)
 		_pad_cooldown = 0.6
 	airborne_time = 0.0 if on_floor_now else airborne_time + delta
 	if global_position.y < -6.0:
 		respawn()
 
 
-func _drift_entry() -> float:
-	return smoothstep(0.0, maxf(drift_entry_time, 0.001), drift_time)
+# --- Máquina de estados del derrape ---------------------------------------------
 
+func _update_drift(delta: float, throttle: float, grounded: bool) -> void:
+	var deg := rad_to_deg(absf(slip_angle))
+	var speed := Vector2(velocity.x, velocity.z).length()
+
+	# Seguimiento del acelerador (soltar = por debajo del 20 %)
+	if throttle < 0.2 and not _lifted:
+		_lifted = true
+		_lift_start = _time
+	elif throttle > 0.5 and _lifted:
+		_lifted = false
+		if drift_state == DriftState.WINDOW and _window_released:
+			var lift_time := _time - _window_release_t
+			if lift_time >= lift_min:
+				_mini_turbo()
+			else:
+				_drift_fail("fail_lift")
+			return
+
+	if _spun and deg < drift_recover_deg:
+		_spun = false
+
+	match drift_state:
+		DriftState.NONE, DriftState.WINDOW:
+			if grounded and not _spun and speed > slide_min_speed and deg > drift_enter_deg:
+				if drift_state == DriftState.WINDOW:
+					_drift_fail("fail_new_slide")
+				_start_drift()
+			elif drift_state == DriftState.WINDOW:
+				window_left -= delta
+				# Solo cuenta soltar DESPUÉS de enderezar (o justo antes, ver release_grace)
+				if _lifted and not _window_released and _lift_start >= _window_open_t - release_grace:
+					_window_released = true
+					_window_release_t = _lift_start
+				if window_left <= 0.0:
+					_drift_fail("fail_late" if _window_released else "fail_lift")
+		DriftState.SLIDING:
+			if deg > drift_recover_deg:
+				drift_time += delta
+			drift_peak_deg = maxf(drift_peak_deg, deg)
+			var lvl := 0
+			for i in drift_level_times.size():
+				if drift_time >= drift_level_times[i]:
+					lvl = i + 1
+			if lvl != drift_level:
+				drift_level = lvl
+				drift_level_changed.emit(drift_level)
+			if deg > drift_spin_deg:
+				_spun = true
+				_drift_fail("fail_spin")
+			elif speed < slide_min_speed * 0.7:
+				_drift_fail("fail_slow")
+			elif deg < drift_recover_deg:
+				_recover_t += delta
+				if _recover_t >= drift_recover_hold:
+					_on_recovered()
+			else:
+				_recover_t = 0.0
+
+
+func _start_drift() -> void:
+	drift_state = DriftState.SLIDING
+	drift_time = 0.0
+	drift_peak_deg = 0.0
+	_recover_t = 0.0
+	drift_level = 0
+	drift_event.emit("slide", 0)
+
+
+func _on_recovered() -> void:
+	if drift_time < drift_min_time or drift_level == 0:
+		_drift_fail("fail_short")
+		return
+	drift_state = DriftState.WINDOW
+	window_left = boost_window
+	_window_open_t = _time
+	# Si ya había soltado justo antes de enderezar, también vale
+	_window_released = _lifted and (_time - _lift_start) <= release_grace
+	_window_release_t = _lift_start
+	drift_event.emit("window", drift_level)
+
+
+func _mini_turbo() -> void:
+	var lvl := clampi(drift_level, 1, mini_turbo_time.size())
+	mini_turbos += 1
+	apply_boost(mini_turbo_time[lvl - 1], "mini%d" % lvl, mini_turbo_speed_mult)
+	turbo_meter = minf(turbo_meter + 0.06 * lvl, 1.0)
+	drift_event.emit("success", lvl)
+	_reset_drift()
+
+
+func _drift_fail(kind: String) -> void:
+	var lvl := drift_level
+	_reset_drift()
+	drift_event.emit(kind, lvl)
+
+
+func _reset_drift() -> void:
+	drift_state = DriftState.NONE
+	drift_time = 0.0
+	window_left = 0.0
+	_window_released = false
+	_recover_t = 0.0
+	if drift_level != 0:
+		drift_level = 0
+		drift_level_changed.emit(0)
+
+
+# --- Choques ---------------------------------------------------------------------
 
 func _handle_collisions(pre_move: Vector3) -> void:
 	last_impact = 0.0
@@ -334,14 +494,13 @@ func _handle_collisions(pre_move: Vector3) -> void:
 		if other is RigidBody3D:
 			# Conos y objetos sueltos: salen volando y apenas nos frenan.
 			var rb := other as RigidBody3D
-			if rb.linear_velocity.length() < 4.0:  # un solo empujón por golpe
+			if rb.linear_velocity.length() < 4.0:
 				rb.sleeping = false
 				rb.apply_central_impulse(pre_planar * rb.mass * 0.45 + Vector3.UP * rb.mass * 3.0)
 				rb.apply_torque_impulse(Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * rb.mass)
 			velocity.x = pre_planar.x * 0.93
 			velocity.z = pre_planar.z * 0.93
 			continue
-		# Las caras de los muros pueden devolver la normal del lado contrario: la orientamos hacia el kart
 		if n.dot(pre_planar) > 0.0:
 			n = -n
 		var impact := clampf(-pre_planar.normalized().dot(n), 0.0, 1.0)
@@ -354,61 +513,37 @@ func _handle_collisions(pre_move: Vector3) -> void:
 		velocity.x *= 1.0 - wall_speed_loss * last_impact
 		velocity.z *= 1.0 - wall_speed_loss * last_impact
 		velocity += wall_normal * last_impact * wall_bounce
-		if drifting and last_impact > 0.35:
-			_cancel_drift()
+		yaw_rate *= 0.5
+		if drift_state == DriftState.SLIDING and last_impact > 0.35:
+			_drift_fail("fail_wall")
 		wall_hit.emit(last_impact * spd)
 
 
-# --- Derrape y turbo --------------------------------------------------------------
-
-func _start_drift(dir: int, planar: Vector3, fwd: Vector3) -> void:
-	drifting = true
-	drift_dir = dir
-	drift_time = 0.0
-	drift_charge = 0.0
-	drift_level = 0
-	# Partimos del ángulo real que ya llevara el kart (sin saltos)
-	if planar.length() > 1.0:
-		drift_slip = clampf(absf(fwd.signed_angle_to(planar.normalized(), Vector3.UP)), 0.0, drift_slip_max)
-	else:
-		drift_slip = 0.0
-
-
-func _release_drift() -> void:
-	if drift_level > 0:
-		apply_boost(mini_turbo_time[drift_level - 1], "mini%d" % drift_level)
-		turbo_meter = minf(turbo_meter + 0.08 * drift_level, 1.0)
-	_cancel_drift()
-
-
-func _cancel_drift() -> void:
-	drifting = false
-	drift_dir = 0
-	drift_time = 0.0
-	drift_charge = 0.0
-	if drift_level != 0:
-		drift_level = 0
-		drift_level_changed.emit(0)
-
+# --- Turbo ------------------------------------------------------------------------
 
 func try_turbo() -> bool:
 	if turbo_meter < 1.0:
 		return false
 	turbo_meter = 0.0
-	apply_boost(turbo_time, "turbo")
+	apply_boost(turbo_time, "turbo", boost_speed_mult)
 	return true
 
 
-func apply_boost(seconds: float, kind: String) -> void:
+func apply_boost(seconds: float, kind: String, mult: float = -1.0) -> void:
+	var m := boost_speed_mult if mult < 0.0 else mult
+	if boost_time <= 0.0 or m >= _boost_mult:
+		_boost_mult = m
 	boost_time = maxf(boost_time, seconds)
 	boost_started.emit(kind)
 
 
 func respawn() -> void:
-	_cancel_drift()
 	velocity = Vector3.ZERO
 	boost_time = 0.0
-	drift_slip = 0.0
+	yaw_rate = 0.0
+	slip_angle = 0.0
+	slide_amount = 0.0
+	_reset_drift()
 	if track != null:
 		global_transform = track.respawn_transform(global_position)
 	else:
@@ -420,8 +555,11 @@ func place(t: Transform3D) -> void:
 	velocity = Vector3.ZERO
 	steer_value = 0.0
 	yaw_rate = 0.0
-	drift_slip = 0.0
-	_cancel_drift()
+	slip_angle = 0.0
+	slide_amount = 0.0
+	_spun = false
+	_lifted = false
+	_reset_drift()
 	boost_time = 0.0
 	turbo_meter = 1.0
 
@@ -437,12 +575,15 @@ func _process(delta: float) -> void:
 		return
 	var planar := Vector3(velocity.x, 0, velocity.z)
 	var fwd := -global_transform.basis.z
+	var look_back := false
+	if controls_enabled and input_override.is_empty():
+		look_back = Input.is_action_pressed("look_back")
 	var state := {
 		"distance": planar.dot(fwd) * delta,
 		"speed": planar.length(),
 		"speed_ratio": clampf(planar.length() / max_speed, 0.0, 1.3),
 		"steer": steer_value,
-		"drifting": drifting,
+		"drifting": slide_amount > 0.25,
 		"drift_dir": drift_dir,
 		"drift_slip": drift_slip,
 		"yaw_rate": yaw_rate,
@@ -450,6 +591,6 @@ func _process(delta: float) -> void:
 		"braking": braking_input > 0.1 and forward_speed > 3.0,
 		"grounded": is_on_floor(),
 		"vertical_speed": velocity.y,
-		"look_back": controls_enabled and Input.is_action_pressed("look_back"),
+		"look_back": look_back,
 	}
 	model.update_visual(state, delta)

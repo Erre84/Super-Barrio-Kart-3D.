@@ -16,12 +16,18 @@ var _timeout := 150.0
 var _phase := "lap"          # lap -> reverse -> done
 var _phase_t := 0.0
 var _stats := {
-	"max_kmh": 0.0, "wall_hits": 0, "max_drift_level": 0, "boosts": [], "offroad_time": 0.0,
+	"max_kmh": 0.0, "wall_hits": 0, "max_drift_level": 0, "max_slip_deg": 0.0, "boosts": [], "offroad_time": 0.0,
 	"lap_time": -1.0, "min_forward_speed": 0.0, "respawns": 0, "cones_hit": 0, "frames": 0,
 }
 var _stuck_time := 0.0
 var _quit_after := ""
 var _look_back_frames := 0
+var _stunt := ""
+var _stunt_t := 0.0
+var _stunt_done := false
+var _after_stunt := 0.0
+var _no_stunt := "--no-stunt" in OS.get_cmdline_user_args()
+var _off_log := {}
 
 
 func _ready() -> void:
@@ -62,8 +68,12 @@ func _physics_process(delta: float) -> void:
 				float(kart.track_info.get("progress", 0.0)), kmh, kart.on_road, kart.drift_level])
 	_stats["max_kmh"] = maxf(_stats["max_kmh"], kmh)
 	_stats["max_drift_level"] = maxi(_stats["max_drift_level"], kart.drift_level)
+	_stats["max_slip_deg"] = maxf(_stats["max_slip_deg"], rad_to_deg(absf(kart.slip_angle)))
 	if not kart.on_road:
 		_stats["offroad_time"] += delta
+		var pk := "%.2f" % snappedf(float(kart.track_info.get("progress", 0.0)), 0.02)
+		_off_log[pk] = _off_log.get(pk, 0.0) + delta
+		_stats["offroad_where"] = _off_log
 	_stats["min_forward_speed"] = minf(_stats["min_forward_speed"], kart.forward_speed)
 
 	match _phase:
@@ -76,7 +86,6 @@ func _physics_process(delta: float) -> void:
 		"reverse":
 			_phase_t += delta
 			_press("accelerate", 0.0)
-			_press("drift", 0.0)
 			_press("steer_left", 0.0)
 			_press("steer_right", 0.0)
 			_press("brake", 1.0)
@@ -109,28 +118,59 @@ func _drive(kart, track) -> void:
 	var fwd: Vector3 = -kart.global_transform.basis.z
 	var ang := fwd.signed_angle_to(to.normalized(), Vector3.UP)  # + = objetivo a la izquierda
 	var steer := clampf(-ang * 2.6, -1.0, 1.0)
-	# Curvatura por delante (+ = curva a la izquierda)
+	# Curvatura máxima por delante (+ = curva a la izquierda)
 	var k_ahead := 0.0
-	for k in range(2, 16, 2):
+	for k in range(2, 30, 2):
 		var kk: float = track.curv[(i + k) % n]
 		if absf(kk) > absf(k_ahead):
 			k_ahead = kk
-	var drift_on := false
-	if kart.drifting:
-		# Seguir derrapando mientras la curva continúe y vaya hacia el mismo lado
-		drift_on = absf(k_ahead) > 0.012 and signf(-k_ahead) == float(kart.drift_dir)
-		steer = clampf(-ang * 3.2, -1.0, 1.0)
-	elif absf(k_ahead) > 0.02 and speed > 14.0:
-		drift_on = true
-		steer = -signf(k_ahead) * 0.85
+	# Velocidad de paso con agarre (v² = a / k), con margen
+	var v_corner: float = sqrt(kart.grip_peak * 0.8 / maxf(absf(k_ahead), 0.001))
+	var throttle := 1.0
+	var brake := 0.0
+	if speed > v_corner:
+		throttle = 0.0
+		if speed > v_corner * 1.12:
+			brake = 0.4
+	# Si se cruza, contravolante proporcional a la deriva (lo que haría un jugador)
+	# (slip_angle > 0: el morro apunta a la izquierda de la trayectoria → volante a la derecha)
+	if kart.slide_amount > 0.2 and _stunt == "":
+		steer = clampf(steer + kart.slip_angle * 2.5, -1.0, 1.0)
+		brake = 0.0
+	# Maniobra de mini-turbo en la recta de salida: volantazo, contravolante, suelta y pisa
+	var prog := float(info["progress"])
+	if _no_stunt:
+		_stunt_done = true
+	if _stunt == "" and not _stunt_done and prog > 0.035 and prog < 0.06 and speed > 25.0:
+		_stunt = "flick"
+		_stunt_t = 0.0
+	if _stunt != "":
+		_stunt_t += get_physics_process_delta_time()
+		throttle = 1.0
+		brake = 0.0
+		match _stunt:
+			"flick":
+				steer = 1.0
+				if _stunt_t > 0.7:
+					_stunt = "counter"
+			"counter":
+				steer = -1.0 if rad_to_deg(absf(kart.slip_angle)) > 4.0 else 0.0
+				if kart.drift_state == 2:
+					_stunt = "lift"
+					_stunt_t = 0.0
+				elif _stunt_t > 3.0:
+					_stunt = ""
+					_stunt_done = true
+			"lift":
+				steer = clampf(-ang * 2.6, -1.0, 1.0)
+				throttle = 0.0 if _stunt_t < 0.1 else 1.0
+				if _stunt_t > 0.15:
+					_stunt = ""
+					_stunt_done = true
 	_press("steer_right", maxf(steer, 0.0))
 	_press("steer_left", maxf(-steer, 0.0))
-	_press("drift", 1.0 if drift_on else 0.0)
-	var throttle := 1.0
-	if absf(k_ahead) > 0.045 and speed > 22.0 and not kart.drifting:
-		throttle = 0.0
 	_press("accelerate", throttle)
-	_press("brake", 0.0)
+	_press("brake", brake)
 	# Turbo en la recta de meta
 	if kart.turbo_meter >= 1.0 and absf(steer) < 0.15 and speed > 18.0 and _t > 6.0:
 		Input.action_press("turbo")
@@ -147,8 +187,15 @@ func _drive(kart, track) -> void:
 		_stuck_time = 0.0
 	# Capturas
 	_shot("02_salida", _t > 5.0)
-	_shot("03_derrape", kart.drifting and kart.drift_level >= 1)
-	_shot_front("07_derrape_frente", kart.drifting and kart.drift_time > 0.45)
+	_shot("03_derrape", kart.drifting and kart.drift_time > 0.6)
+	_shot_front("07_derrape_frente", kart.drifting and kart.drift_time > 0.75)
+	_shot("09_suelta_y_pisa", kart.drift_state == 2)
+	if _stunt_done and _after_stunt >= 0.0:
+		_after_stunt += get_physics_process_delta_time()
+		if _after_stunt > 0.6:
+			_after_stunt = -1.0
+			_shot_cam("10_marcas_goma", Vector3.UP * 16.0 + kart.global_transform.basis.z * 6.0,
+					-kart.global_transform.basis.z * -16.0)
 	_shot_front("08_turbo_frente", kart.boost_time > 0.3 and float(info["progress"]) > 0.3)
 	_shot("04_avenida", float(info["progress"]) > 0.55)
 	# Mirar atrás: mantener el botón ~0,5 s, capturar y soltar
@@ -180,18 +227,26 @@ func _shot(shot_name: String, condition: bool) -> void:
 
 ## Captura con una cámara delante del kart, mirándolo (sin HUD).
 func _shot_front(shot_name: String, condition: bool) -> void:
-	if _shots_dir == "" or not condition or _shots_done.has(shot_name):
+	if not condition:
 		return
-	_shots_done[shot_name] = true
 	var kart = race.kart
 	var fwd: Vector3 = -kart.global_transform.basis.z
 	var right: Vector3 = kart.global_transform.basis.x
+	_shot_cam(shot_name, fwd * 5.2 + right * 1.6 + Vector3.UP * 1.25, Vector3.UP * 0.75 + fwd * 0.4)
+
+
+## Captura con una cámara libre (posición y objetivo relativos al kart), sin HUD.
+func _shot_cam(shot_name: String, offset: Vector3, look_offset: Vector3) -> void:
+	if _shots_dir == "" or _shots_done.has(shot_name):
+		return
+	_shots_done[shot_name] = true
+	var kart = race.kart
 	var cam := Camera3D.new()
 	cam.fov = 50.0
 	cam.far = 1500.0
 	race.add_child(cam)
-	cam.global_position = kart.global_position + fwd * 5.2 + right * 1.6 + Vector3.UP * 1.25
-	cam.look_at(kart.global_position + Vector3.UP * 0.75 + fwd * 0.4, Vector3.UP)
+	cam.global_position = kart.global_position + offset
+	cam.look_at(kart.global_position + look_offset, Vector3.UP)
 	cam.make_current()
 	race.hud.visible = false
 	get_tree().paused = true
@@ -209,7 +264,7 @@ func _shot_front(shot_name: String, condition: bool) -> void:
 
 func _finish() -> void:
 	set_physics_process(false)
-	for a in ["accelerate", "brake", "steer_left", "steer_right", "drift", "turbo", "look_back"]:
+	for a in ["accelerate", "brake", "steer_left", "steer_right", "turbo", "look_back"]:
 		Input.action_release(a)
 	var moved := 0
 	for c in get_tree().get_nodes_in_group("knockable"):

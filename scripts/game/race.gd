@@ -71,6 +71,7 @@ func _ready() -> void:
 
 	kart.wall_hit.connect(_on_wall_hit)
 	kart.boost_started.connect(_on_boost)
+	kart.drift_event.connect(_on_drift_event)
 
 	# Opciones de desarrollo (godot --path . -- --touch / --autopilot)
 	if "--touch" in OS.get_cmdline_user_args() and not hud.touch.visible:
@@ -169,6 +170,8 @@ func _process(_delta: float) -> void:
 	hud.update_race(lap, TOTAL_LAPS, shown_time, best_lap, state == "finished")
 	hud.update_kart(kart.get_speed_kmh(), kart.turbo_meter, kart.drift_level, kart.boost_time > 0.0,
 			kart.global_position, -kart.global_transform.basis.z)
+	hud.update_drift(int(kart.drift_state), kart.drift_time, kart.drift_level, kart.window_left,
+			kart.boost_window, rad_to_deg(absf(kart.slip_angle)), kart.drift_level_times)
 
 
 func _toggle_pause() -> void:
@@ -183,11 +186,28 @@ func _on_wall_hit(strength: float) -> void:
 	camera.add_shake(clampf(strength / 40.0, 0.05, 0.5))
 
 
+const DRIFT_COLS := [Color("3fa9ff"), Color("ff8c1a"), Color("c75cff")]
+
+func _on_drift_event(kind: String, level: int) -> void:
+	var col: Color = DRIFT_COLS[clampi(level, 1, 3) - 1]
+	match kind:
+		"success":
+			hud.show_message(["¡MINI-TURBO!", "¡MINI-TURBO!", "¡SUPER MINI-TURBO!"][clampi(level, 1, 3) - 1],
+					"", 0.8, col)
+			camera.punch(4.0 + level * 2.0)
+		"fail_late":
+			hud.show_message("", "Tarde: pisa antes", 0.9, Color.WHITE)
+		"fail_lift":
+			hud.show_message("", "Suelta el acelerador y vuelve a pisar", 1.0, Color.WHITE)
+		"fail_spin":
+			hud.show_message("", "¡Trompo! Contravolantea antes", 1.1, Color.WHITE)
+		"fail_wall":
+			hud.show_message("", "Derrape perdido por el choque", 0.9, Color.WHITE)
+
+
 func _on_boost(kind: String) -> void:
 	match kind:
 		"turbo":
 			hud.show_message("¡TURBO!", "", 0.8, Color("c75cff"))
-		"mini3":
-			hud.show_message("¡SUPER MINI-TURBO!", "", 0.8, Color("c75cff"))
 		"pad":
 			hud.show_message("¡ACELERADOR!", "", 0.6, Color("ff7b00"))

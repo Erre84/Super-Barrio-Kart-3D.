@@ -43,12 +43,13 @@ Si alguna vez da un error de "firma distinta", desinstala la versión anterior y
 | | ATRÁS | Mirar hacia atrás mientras lo mantienes |
 | Pulgar derecho | ACEL | Acelerar |
 | | FRENO | Frenar y, parado, marcha atrás |
-| | DERRAPE | Mantener + girar = derrape; soltar = mini-turbo |
 | | TURBO | Turbo cuando la barra pone "¡LISTO!" |
 | Arriba | II | Pausa |
 
-Para derrapar: mantén **ACEL**, pulsa **DERRAPE** y gira con **◀** o **▶**. Mientras derrapas,
-girar hacia la curva la cierra; girar hacia fuera (contravolante) la abre sin perder el derrape.
+**Derrapar (sin botón):** a buena velocidad, mantén **◀** o **▶** a fondo: las ruedas pierden
+agarre y el kart se cruza. Para enderezar, pulsa el lado contrario (contravolante). Cuando
+quede recto y aparezca **"¡SUELTA Y PISA!"**, levanta el dedo de **ACEL** y vuelve a pulsarlo
+enseguida: **mini-turbo**. Guía completa en [`DERRAPE.md`](DERRAPE.md).
 
 ## Si algo va mal
 

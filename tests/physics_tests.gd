@@ -7,7 +7,7 @@ const InputSetup := preload("res://scripts/core/input_setup.gd")
 const TrackScene := preload("res://scenes/track_el_prat.tscn")
 const KartScene := preload("res://scenes/kart.tscn")
 
-const ACTIONS := ["accelerate", "brake", "steer_left", "steer_right", "drift", "turbo", "look_back", "reset"]
+const ACTIONS := ["accelerate", "brake", "steer_left", "steer_right", "turbo", "look_back", "reset"]
 
 var world: Node3D
 var track
@@ -30,16 +30,36 @@ func _run() -> void:
 	kart = KartScene.instantiate()
 	world.add_child(kart)
 	kart.controls_enabled = true
+	kart.drift_event.connect(func(kind: String, lvl: int):
+		events.append("%s:%d" % [kind, lvl])
+		if kind != "slide":
+			_last_drift_time = kart.drift_time)
 	await physics_frame
 
 	await _test_no_auto_steer()
 	await _test_turns_left_right()
 	await _test_steer_release()
-	await _test_progressive_drift()
-	await _test_countersteer()
+	# --- Derrape natural (v0.3) ---
+	await _test_grip_moderate_turn()
+	await _test_flick_slides_on_straight()
+	await _test_progressive_grip_loss()
+	await _test_low_speed_grips()
+	await _test_slide_symmetry()
+	await _test_lateral_inertia()
+	await _test_countersteer_recovers()
+	await _test_hold_keeps_drifting()
+	await _test_brake_spin_invalid()
+	# --- Mini-turbo por maniobra ---
+	await _test_mini_turbo_success()
+	await _test_mini_turbo_late()
+	await _test_mini_turbo_no_release()
+	await _test_mini_turbo_short_drift()
+	await _test_throttle_spam_no_boost()
+	await _test_window_spam_single_boost()
+	await _test_chain_on_straight()
+	# --- Generales ---
 	await _test_reverse()
 	await _test_turbo_top_speed()
-	await _test_drift_levels()
 	await _test_wall_blocks()
 	await _test_cone_knock()
 	await _test_offroad_slows()
@@ -53,6 +73,8 @@ func _run() -> void:
 func _release_all() -> void:
 	for a in ACTIONS:
 		Input.action_release(a)
+	if kart != null:
+		kart.input_override = {}
 
 
 func _frames(n: int) -> void:
@@ -123,29 +145,6 @@ func _test_turbo_top_speed() -> void:
 	_release_all()
 
 
-func _test_drift_levels() -> void:
-	await _open_field()
-	Input.action_press("accelerate")
-	await _frames(150)
-	Input.action_press("steer_right")
-	Input.action_press("drift")
-	var max_level := 0
-	var started := false
-	for k in 240:
-		await physics_frame
-		started = started or kart.drifting
-		max_level = maxi(max_level, kart.drift_level)
-	_check("entra en derrape", started, "derrape activo")
-	_check("mini-turbo morado (nivel 3)", max_level == 3, "nivel máximo %d" % max_level)
-	var boosts: Array = []
-	kart.boost_started.connect(func(kind): boosts.append(kind))
-	Input.action_release("drift")
-	await _frames(3)
-	_check("al soltar sale el mini-turbo", "mini3" in boosts, str(boosts))
-	_release_all()
-	await _frames(60)
-
-
 func _test_wall_blocks() -> void:
 	# Directo contra el muro exterior a máxima velocidad con turbo
 	_release_all()
@@ -202,129 +201,342 @@ func _test_offroad_slows() -> void:
 	_release_all()
 
 
-# --- Pruebas de dirección (v0.2) ---------------------------------------------------
+# =============================================================================
+# Utilidades con entrada inyectada (kart.input_override): control exacto por fotograma
+# =============================================================================
 
-## Acelera en campo abierto hasta ~`frames` y gira con `action` durante `turn_frames`.
-## Devuelve giro (rad, + = izquierda), desplazamiento lateral (+ = derecha) y velocidad conservada.
-func _turn(action: String, turn_frames: int) -> Dictionary:
-	await _open_field()
-	Input.action_press("accelerate")
-	await _frames(150)
+var events: Array = []
+var _last_drift_time := 0.0
+
+
+func _inp(d: Dictionary) -> void:
+	kart.input_override = d.duplicate()
+	if kart.input_override.is_empty():
+		kart.input_override = {"_": 0.0}   # no vacío: ignora Input real
+
+
+func _slip() -> float:
+	return rad_to_deg(absf(kart.slip_angle))
+
+
+## Campo abierto a velocidad punta, recto.
+func _at_speed(frames: int = 240) -> void:
+	_release_all()
+	kart.track = null
+	kart.on_road = true
+	kart.place(Transform3D(Basis(), Vector3(900, 0.05, 900)))
+	_inp({"accelerate": 1.0})
+	await _frames(frames)
+	events.clear()
+
+
+## Volantazo a la derecha `hold` fotogramas y contravolante hasta abrir la ventana.
+## Devuelve true si el derrape fue válido y la ventana se abrió.
+func _drift_and_recover(hold: int, side := "steer_right") -> bool:
+	var counter := "steer_left" if side == "steer_right" else "steer_right"
+	_inp({"accelerate": 1.0, side: 1.0})
+	await _frames(hold)
+	_inp({"accelerate": 1.0, counter: 1.0})
+	for i in 150:
+		await physics_frame
+		if _slip() < 4.0:
+			_inp({"accelerate": 1.0})
+		if kart.drift_state == 2:
+			return true
+		if kart.drift_state == 0 and i > 10:
+			return false
+	return false
+
+
+func _boosts(kind_prefix: String) -> int:
+	var n := 0
+	for e in events:
+		if String(e).begins_with(kind_prefix):
+			n += 1
+	return n
+
+
+# =============================================================================
+# Dirección con agarre
+# =============================================================================
+
+func _turn(side: String, steer: float, frames: int) -> Dictionary:
+	await _at_speed(150)
 	var p0: Vector3 = kart.global_position
 	var y0 := _yaw()
 	var right0: Vector3 = kart.global_transform.basis.x
 	var v0: float = kart.get_speed_kmh()
-	Input.action_press(action)
-	await _frames(turn_frames)
-	var res := {
-		"dyaw": angle_difference(y0, _yaw()),
-		"lateral": (kart.global_position - p0).dot(right0),
-		"keep": kart.get_speed_kmh() / v0,
-	}
-	_release_all()
-	return res
+	_inp({"accelerate": 1.0, side: steer})
+	var mx := 0.0
+	for i in frames:
+		await physics_frame
+		mx = maxf(mx, _slip())
+	return {"dyaw": angle_difference(y0, _yaw()), "lateral": (kart.global_position - p0).dot(right0),
+			"keep": kart.get_speed_kmh() / v0, "slip": mx}
 
 
 func _test_turns_left_right() -> void:
-	var l := await _turn("steer_left", 60)
-	var r := await _turn("steer_right", 60)
-	_check("giro a la izquierda", l["dyaw"] > 0.5 and l["lateral"] < -2.0,
+	var l := await _turn("steer_left", 0.6, 60)
+	var r := await _turn("steer_right", 0.6, 60)
+	_check("giro a la izquierda (60 % de volante)", l["dyaw"] > 0.4 and l["lateral"] < -2.0,
 			"%.2f rad, %.1f m a la izquierda" % [l["dyaw"], -l["lateral"]])
-	_check("giro a la derecha", r["dyaw"] < -0.5 and r["lateral"] > 2.0,
+	_check("giro a la derecha (60 % de volante)", r["dyaw"] < -0.4 and r["lateral"] > 2.0,
 			"%.2f rad, %.1f m a la derecha" % [-r["dyaw"], r["lateral"]])
 	var sym_yaw := absf(l["dyaw"] + r["dyaw"])
 	var sym_lat := absf(l["lateral"] + r["lateral"])
 	_check("izquierda y derecha simétricas", sym_yaw < 0.005 and sym_lat < 0.05,
 			"diferencia %.4f rad / %.3f m" % [sym_yaw, sym_lat])
-	_check("sin freno automático en curva", l["keep"] > 0.85 and r["keep"] > 0.85,
-			"conserva %.0f%% / %.0f%% de la velocidad con gas a fondo" % [l["keep"] * 100.0, r["keep"] * 100.0])
+	_check("sin freno automático en curva", l["keep"] > 0.97 and r["keep"] > 0.97,
+			"conserva %.0f%% / %.0f%% de la velocidad" % [l["keep"] * 100.0, r["keep"] * 100.0])
 
 
 func _test_steer_release() -> void:
-	await _open_field()
-	Input.action_press("accelerate")
-	await _frames(150)
-	Input.action_press("steer_right")
+	await _at_speed(150)
+	_inp({"accelerate": 1.0, "steer_right": 0.6})
 	await _frames(30)
-	Input.action_release("steer_right")
-	await _frames(9)   # 0,15 s para que el volante vuelva al centro
+	_inp({"accelerate": 1.0})
+	await _frames(18)
 	var rate_after: float = kart.yaw_rate
+	await _frames(11)
 	var y0 := _yaw()
 	await _frames(60)
 	var drift := absf(angle_difference(y0, _yaw()))
-	_check("al soltar, el volante vuelve en <0,15 s", absf(rate_after) < 0.001, "giro residual %.4f rad/s" % rate_after)
+	_check("al soltar, el giro se detiene en <0,3 s (inercia de la carrocería)", absf(rate_after) < 0.05, "giro residual %.3f rad/s" % rate_after)
 	_check("después sigue recto (sin autocorrección)", drift < 0.0005, "%.5f rad en 1 s" % drift)
-	_release_all()
 
 
-## Entra en derrape a la derecha; devuelve el kart ya derrapando (o null si no entra).
-func _enter_drift_right() -> bool:
-	await _open_field()
-	Input.action_press("accelerate")
-	await _frames(150)
-	Input.action_press("steer_right")
-	Input.action_press("drift")
+# =============================================================================
+# Derrape natural
+# =============================================================================
+
+func _test_grip_moderate_turn() -> void:
+	var r := await _turn("steer_right", 0.6, 60)
+	_check("giro moderado a fondo: agarra", r["slip"] < 4.0, "deriva máxima %.1f°" % r["slip"])
+
+
+func _test_flick_slides_on_straight() -> void:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	var mx := 0.0
+	var t_enter := -1.0
+	for i in 48:
+		await physics_frame
+		mx = maxf(mx, _slip())
+		if t_enter < 0.0 and kart.drift_state == 1:
+			t_enter = (i + 1) / 60.0
+	_check("volantazo en recta: pierde agarre y derrapa", mx > 15.0 and t_enter > 0.0,
+			"deriva %.1f°, derrape desde %.2f s, %.1f m/s laterales (campo abierto, sin curva)" % [mx, t_enter, absf(kart.lateral_speed)])
+
+
+func _test_progressive_grip_loss() -> void:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	var series: Array[float] = []
+	var max_step := 0.0
+	var prev := 0.0
 	for i in 60:
 		await physics_frame
-		if kart.drifting:
-			return true
-	return false
+		series.append(_slip())
+		max_step = maxf(max_step, absf(_slip() - prev))
+		prev = _slip()
+	var grows: bool = series[15] < series[30] and series[30] < series[45] and series[15] < 8.0
+	_check("pérdida de agarre progresiva", grows and max_step < 2.5,
+			"deriva %.1f° → %.1f° → %.1f° (0,25 / 0,5 / 0,75 s), salto máx. %.2f°/fotograma" % [series[15], series[30], series[45], max_step])
 
 
-func _test_progressive_drift() -> void:
-	var ok: bool = await _enter_drift_right()
-	if not ok:
-		_check("derrape progresivo", false, "no entró en derrape")
-		return
-	var slips: Array[float] = []
-	var yaws: Array[float] = []
-	var max_step := 0.0
-	var prev: float = kart.drift_slip
-	for i in 40:
+func _test_low_speed_grips() -> void:
+	await _at_speed(45)   # ~50 km/h
+	var v: float = kart.get_speed_kmh()
+	_inp({"accelerate": 0.0, "steer_right": 1.0})
+	var mx := 0.0
+	for i in 60:
 		await physics_frame
-		slips.append(kart.drift_slip)
-		yaws.append(absf(kart.yaw_rate))
-		max_step = maxf(max_step, absf(kart.drift_slip - prev))
-		prev = kart.drift_slip
-	var grows: bool = slips[2] < slips[9] and slips[9] < slips[30] and slips[2] < slips[39] * 0.5
-	_check("derrape progresivo: el ángulo crece", grows,
-			"deslizamiento %.2f → %.2f → %.2f rad (0,05 s / 0,17 s / 0,52 s)" % [slips[2], slips[9], slips[30]])
-	_check("derrape progresivo: el giro crece", yaws[2] < yaws[15],
-			"giro %.2f → %.2f rad/s" % [yaws[2], yaws[15]])
-	var limit: float = kart.drift_slip_rate / 60.0 + 0.0005
-	_check("derrape sin saltos bruscos", max_step <= limit, "cambio máximo por fotograma %.4f rad (límite %.4f)" % [max_step, limit])
-	_release_all()
+		mx = maxf(mx, _slip())
+	_check("a baja velocidad no derrapa", mx < 3.0, "%.0f km/h, volante a fondo: deriva %.1f°" % [v, mx])
+
+
+func _slide_series(side: String) -> Array[float]:
+	await _at_speed()
+	_inp({"accelerate": 1.0, side: 1.0})
+	var out: Array[float] = []
+	for i in 60:
+		await physics_frame
+		out.append(rad_to_deg(kart.slip_angle))
+	return out
+
+
+func _test_slide_symmetry() -> void:
+	var r := await _slide_series("steer_right")
+	var l := await _slide_series("steer_left")
+	var diff := 0.0
+	for i in r.size():
+		diff = maxf(diff, absf(r[i] + l[i]))
+	_check("derrape simétrico izquierda/derecha", diff < 0.05 and absf(r[59]) > 15.0,
+			"derecha %.1f° / izquierda %.1f°, diferencia máx. %.3f°" % [r[59], l[59], diff])
+
+
+func _test_lateral_inertia() -> void:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	await _frames(60)
+	_inp({"accelerate": 1.0})
+	var t := 0.0
+	while _slip() > 5.0 and t < 3.0:
+		await physics_frame
+		t += 1.0 / 60.0
+	_check("conserva inercia lateral al soltar el volante", t > 0.6, "sigue deslizando %.2f s" % t)
+
+
+func _recovery_time(mode: String) -> float:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	await _frames(60)
+	var d := {"accelerate": 1.0}
+	if mode == "contravolante":
+		d["steer_left"] = 1.0
+	_inp(d)
+	var t := 0.0
+	while _slip() > 5.0 and t < 4.0:
+		await physics_frame
+		t += 1.0 / 60.0
+		if mode == "contravolante" and _slip() < 8.0:
+			_inp({"accelerate": 1.0})
+	return t
+
+
+func _test_countersteer_recovers() -> void:
+	var tn := await _recovery_time("neutro")
+	var tc := await _recovery_time("contravolante")
+	_check("contravolante endereza mucho antes", tc < tn * 0.65 and tc < 0.9,
+			"contravolante %.2f s / volante suelto %.2f s" % [tc, tn])
+
+
+func _test_hold_keeps_drifting() -> void:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	var mn := 999.0
+	var mx := 0.0
+	await _frames(60)
+	for i in 120:
+		await physics_frame
+		mn = minf(mn, _slip())
+		mx = maxf(mx, _slip())
+	_check("volante a fondo: derrape sostenido y controlable", mn > 18.0 and mx < 60.0,
+			"deriva entre %.1f° y %.1f° durante 2 s, %.0f km/h" % [mn, mx, kart.get_speed_kmh()])
+
+
+func _test_brake_spin_invalid() -> void:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	await _frames(40)
+	_inp({"brake": 1.0, "steer_right": 1.0})
+	var mx := 0.0
+	for i in 90:
+		await physics_frame
+		mx = maxf(mx, _slip())
+	# recuperar y comprobar que no da turbo
+	_inp({"accelerate": 1.0})
+	await _frames(120)
+	var spin := "fail_spin" in events.map(func(e): return String(e).split(":")[0])
+	_check("frenar a fondo derrapando provoca trompo y anula el derrape", mx > 85.0 and spin and _boosts("success") == 0,
+			"deriva máx. %.0f°, eventos %s" % [mx, str(events)])
+
+
+# =============================================================================
+# Mini-turbo por maniobra
+# =============================================================================
+
+func _test_mini_turbo_success() -> void:
+	await _at_speed()
+	var ok := await _drift_and_recover(60)
+	var lvl: int = kart.drift_level
+	var v0: float = kart.get_speed_kmh()
+	_inp({})                       # suelta el acelerador
+	await _frames(6)               # 0,1 s
+	_inp({"accelerate": 1.0})      # vuelve a pisar
+	await _frames(2)
+	var got := _boosts("success")
+	var boosting: bool = kart.boost_time > 0.0
 	await _frames(30)
+	_check("enderezar + soltar y pisar = mini-turbo", ok and got == 1 and boosting and kart.get_speed_kmh() > v0,
+			"ventana %s, nivel %d, %.0f → %.0f km/h, eventos %s" % [str(ok), lvl, v0, kart.get_speed_kmh(), str(events)])
 
 
-func _test_countersteer() -> void:
-	var results := {}
-	for mode in ["cerrar", "neutro", "contravolante"]:
-		var ok: bool = await _enter_drift_right()
-		if not ok:
-			_check("contravolante", false, "no entró en derrape")
-			return
-		await _frames(25)   # derrape asentado
-		Input.action_release("steer_right")
-		if mode == "cerrar":
-			Input.action_press("steer_right")
-		elif mode == "contravolante":
-			Input.action_press("steer_left")
-		await _frames(40)
-		var yaw := 0.0
-		var slip := 0.0
-		for i in 20:
-			await physics_frame
-			yaw += kart.yaw_rate / 20.0
-			slip += kart.drift_slip / 20.0
-		results[mode] = {"yaw": yaw, "slip": slip, "drifting": kart.drifting}
-		_release_all()
-		await _frames(30)
-	var c: Dictionary = results["cerrar"]
-	var n: Dictionary = results["neutro"]
-	var cs: Dictionary = results["contravolante"]
-	_check("contravolante abre la curva", c["yaw"] < n["yaw"] and n["yaw"] < cs["yaw"] and cs["yaw"] < 0.0,
-			"giro cerrar %.2f / neutro %.2f / contravolante %.2f rad/s" % [-c["yaw"], -n["yaw"], -cs["yaw"]])
-	_check("contravolante reduce el ángulo", c["slip"] > n["slip"] and n["slip"] > cs["slip"],
-			"deslizamiento %.2f / %.2f / %.2f rad" % [c["slip"], n["slip"], cs["slip"]])
-	_check("con contravolante se mantiene el derrape", cs["drifting"], "sigue derrapando")
+func _test_mini_turbo_late() -> void:
+	await _at_speed()
+	var ok := await _drift_and_recover(60)
+	await _frames(int(kart.boost_window * 60.0) + 6)   # se pasa la ventana
+	_inp({})
+	await _frames(6)
+	_inp({"accelerate": 1.0})
+	await _frames(5)
+	_check("pisar fuera de la ventana no da impulso", ok and _boosts("success") == 0 and _boosts("fail_") >= 1,
+			"eventos %s" % str(events))
+
+
+func _test_mini_turbo_no_release() -> void:
+	await _at_speed()
+	var ok := await _drift_and_recover(60)
+	await _frames(int(kart.boost_window * 60.0) + 6)
+	_check("sin soltar el acelerador no hay impulso", ok and _boosts("success") == 0 and _boosts("fail_lift") == 1,
+			"eventos %s" % str(events))
+
+
+func _test_mini_turbo_short_drift() -> void:
+	await _at_speed()
+	_inp({"accelerate": 1.0, "steer_right": 1.0})
+	for i in 90:
+		await physics_frame
+		if kart.drift_state == 1:
+			break
+	_inp({"accelerate": 1.0, "steer_left": 1.0})   # contravolante inmediato: derrape mínimo
+	for i in 90:
+		await physics_frame
+		if _slip() < 4.0:
+			_inp({"accelerate": 1.0})
+		if kart.drift_state != 1:
+			break
+	_inp({})
+	await _frames(5)
+	_inp({"accelerate": 1.0})
+	await _frames(5)
+	_check("derrape demasiado corto no cuenta", _boosts("success") == 0 and _boosts("window") == 0,
+			"eventos %s" % str(events))
+
+
+func _test_throttle_spam_no_boost() -> void:
+	await _at_speed()
+	var before: int = kart.mini_turbos
+	for i in 180:
+		_inp({"accelerate": 1.0 if (i / 3) % 2 == 0 else 0.0})
+		await physics_frame
+	_check("pisar repetidamente sin derrapar no da turbos", kart.mini_turbos == before and _boosts("success") == 0,
+			"3 s machacando el acelerador: %d mini-turbos" % _boosts("success"))
+
+
+func _test_window_spam_single_boost() -> void:
+	await _at_speed()
+	var ok := await _drift_and_recover(60)
+	for i in 30:
+		_inp({"accelerate": 1.0 if (i / 3) % 2 == 1 else 0.0})
+		await physics_frame
+	_inp({"accelerate": 1.0})
+	await _frames(10)
+	_check("machacar en la ventana da un solo mini-turbo", ok and _boosts("success") == 1,
+			"eventos %s" % str(events))
+
+
+func _test_chain_on_straight() -> void:
+	await _at_speed()
+	var got := 0
+	var sides := ["steer_right", "steer_left", "steer_right"]
+	for side in sides:
+		var ok := await _drift_and_recover(55, side)
+		if ok:
+			_inp({})
+			await _frames(5)
+			_inp({"accelerate": 1.0})
+			await _frames(20)
+	got = _boosts("success")
+	_check("encadenar derrapes y mini-turbos en recta", got == 3 and kart.get_speed_kmh() > 85.0,
+			"%d mini-turbos seguidos, %.0f km/h al final" % [got, kart.get_speed_kmh()])
