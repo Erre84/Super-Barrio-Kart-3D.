@@ -1,5 +1,9 @@
 extends Node3D
-## Modelo low-poly del kart + piloto chibi (v0.2), construido por código.
+## Modelo low-poly del kart + piloto chibi, construido por código. Es el ESQUELETO COMÚN
+## de los corredores: cada corredor (scripts/racers/<id>.gd) hereda de aquí y redefine
+## _setup_style() y los ganchos de construcción (_build_chassis, _build_torso, _build_hair,
+## _build_head_extras, _wheel_mesh...), conservando la jerarquía y las animaciones.
+## Sin redefinir nada, es el piloto provisional de la v0.2-v0.6.
 ## Delante es -Z (convención de Godot). El origen está a ras de suelo.
 ##
 ## Jerarquía animada:
@@ -41,6 +45,29 @@ var style := {
 	"shoe_sole": Color("e63946"),
 	"eye": Color("5a3a22"),
 	"number": "7",
+	# --- Piloto (ganchos comunes) ---
+	"sleeve": null,        # color de las mangas (null = "suit")
+	"forearm": null,       # antebrazo (null = manga larga; piel = manga corta)
+	"arm_scale": 1.0,      # grosor de los brazos (complexión)
+	"head_scale": 1.0,     # tamaño de la cabeza
+	"cuff": null,          # puño de la manga junto a la mano (null = "suit_dark")
+	"scarf_tail": true,    # bufanda que ondea
+	"eye_size": 1.0,       # escala de los ojos
+	"eye_lid": 0.0,        # 0 = ojos abiertos; 0.3-0.5 = párpado caído (mirada seria)
+	"brow_tilt": 8.0,      # grados; negativo = ceño (extremo interior abajo)
+	"brow_size": Vector3(0.12, 0.028, 0.03),
+	"brow_y": 0.115,
+	"mouth": "smile",      # smile | flat | smirk | shout
+	"mouth_excited": "grin",
+	"beard": null,         # color de barba (null = sin barba)
+	"beard_style": "full", # full | stubble | goatee
+	"earring": null,       # color de pendientes (null = sin)
+	"blush": true,         # coloretes (estilo cartoon); false = cara más realista
+	"eye_shine": true,     # brillos grandes en los ojos
+	# --- Ruedas ---
+	"rim_style": "spokes", # spokes | dish
+	"tire_band": true,     # franja de color en el flanco
+	"hub": null,           # color del tapacubos (null = "body")
 }
 
 # Nodos animados
@@ -62,11 +89,26 @@ var _arm_parts := {}      # "l_upper", "l_fore", "l_hand", ...
 var exhaust_points: Array[Vector3] = [Vector3(-0.42, 0.5, 1.5), Vector3(0.42, 0.5, 1.5)]
 var rear_wheel_points: Array[Vector3] = [Vector3(-0.8, 0.02, 0.85), Vector3(0.8, 0.02, 0.85)]
 
+# Ruedas: posición (x = semivía) y tamaño (radio, anchura)
+var front_wheel := Vector3(0.76, 0.28, -0.88)
+var front_size := Vector2(0.28, 0.26)
+var rear_wheel := Vector3(0.8, 0.35, 0.85)
+var rear_size := Vector2(0.35, 0.36)
+
+const HEAD_CENTER := Vector3(0, 0.36, 0)
+var _brow_base_y := 0.475
+
 # Geometría del volante (en coordenadas del Body)
-const WHEEL_CENTER := Vector3(0, 0.88, -0.38)
+var WHEEL_CENTER := Vector3(0, 0.88, -0.38)
 const WHEEL_TILT := -58.0
 const WHEEL_R := 0.19
-const DRIVER_ORIGIN := Vector3(0, 0.52, 0.28)
+var DRIVER_ORIGIN := Vector3(0, 0.52, 0.28)
+
+
+## Sube o baja al piloto y el volante juntos (karts con el asiento más alto).
+func _raise_driver(dy: float) -> void:
+	WHEEL_CENTER.y += dy
+	DRIVER_ORIGIN.y += dy
 
 # Estado de animación
 var _t := 0.0
@@ -79,7 +121,13 @@ var _blink := 0.0
 var _wheel_angle := 0.0
 
 
+## Gancho: cada corredor ajusta aquí `style` y las medidas (ruedas, escapes...).
+func _setup_style() -> void:
+	pass
+
+
 func build(custom_style: Dictionary = {}) -> void:
+	_setup_style()
 	for k in custom_style:
 		style[k] = custom_style[k]
 	body_pivot = Node3D.new()
@@ -89,10 +137,60 @@ func build(custom_style: Dictionary = {}) -> void:
 	_build_steering_wheel()
 	_build_driver()
 	_build_wheels()
+	_optimize()
+
+
+# =============================================================================
+# Optimización para móvil
+# =============================================================================
+
+## Piezas que proyectan sombra (el resto son detalles pequeños: no merece la pena
+## pagar otra llamada de dibujo por pieza en la pasada de sombras).
+const SHADOW_PARTS := ["Static", "DriverBody", "HeadMesh", "WheelMesh"]
+## Detalles que dejan de dibujarse a distancia (no se distinguen a más de 45 m).
+const NEAR_ONLY := ["EyeMesh", "Brow", "MouthMesh", "Caliper"]
+
+
+## Une todas las piezas fijas de la carrocería en una malla (una superficie por material)
+## y ajusta sombras y distancia de dibujado.
+func _optimize() -> void:
+	var items := []
+	var to_free: Array[Node] = []
+	for c in body_pivot.get_children():
+		if c is MeshInstance3D and c.mesh != null:
+			items.append([c.mesh, c.transform])
+			to_free.append(c)
+	if items.size() > 1:
+		var merged := MB.merge_surfaces(items)
+		for c in to_free:
+			body_pivot.remove_child(c)
+			c.queue_free()
+		_mi(merged, "Static", body_pivot)
+	_tune_instances(self)
+
+
+func _tune_instances(n: Node) -> void:
+	for c in n.get_children():
+		if c is MeshInstance3D:
+			var mi := c as MeshInstance3D
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if mi.name in SHADOW_PARTS \
+					else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if mi.name in NEAR_ONLY:
+				mi.visibility_range_end = 45.0
+		elif c is Label3D:
+			(c as Label3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			(c as Label3D).visibility_range_end = 45.0
+		_tune_instances(c)
 
 
 func _col(key: String) -> Color:
 	return style[key]
+
+
+## Color con alternativa: si style[key] es null usa style[fallback].
+func _colf(key: String, fallback: String) -> Color:
+	var v = style.get(key)
+	return style[fallback] if v == null else v
 
 
 func _mi(mesh: Mesh, node_name: String, parent: Node3D) -> MeshInstance3D:
@@ -101,6 +199,23 @@ func _mi(mesh: Mesh, node_name: String, parent: Node3D) -> MeshInstance3D:
 	mi.mesh = mesh
 	parent.add_child(mi)
 	return mi
+
+
+## Rótulo 3D pegado a la carrocería (nombres, números).
+func _text(t: String, pos: Vector3, rot_deg: Vector3, px: float, col: Color, size: int = 64,
+		outline: Color = Color(0, 0, 0, 0)) -> Label3D:
+	var l := Label3D.new()
+	l.text = t
+	l.font_size = size
+	l.pixel_size = px
+	l.modulate = col
+	l.outline_size = 0 if outline.a == 0.0 else 10
+	l.outline_modulate = outline
+	l.position = pos
+	l.rotation_degrees = rot_deg
+	l.double_sided = false
+	body_pivot.add_child(l)
+	return l
 
 
 ## Atajo para secciones de loft (ver MeshBuilder.section).
@@ -274,7 +389,7 @@ func _build_steering_wheel() -> void:
 	mb.cylinder(Vector3(0, -0.02, 0), 0.06, 0.05, 8, _col("accent"), _col("body"))
 	mb.pop()
 	mb.box(Vector3(0, WHEEL_R, 0), Vector3(0.03, 0.03, 0.055), _col("accent"))
-	_mi(mb.commit(), "WheelMesh", steering_wheel)
+	_mi(mb.commit_single("rubber"), "SteeringMesh", steering_wheel)
 
 
 # =============================================================================
@@ -296,9 +411,27 @@ func _build_driver() -> void:
 	body_pivot.add_child(driver_pivot)
 
 	var mb := MB.new()
-	var suit := _col("suit")
-	var suit_d := _col("suit_dark")
-	# --- Piernas (vaqueros) y zapatillas ---
+	_build_legs(mb)
+	_build_torso(mb)
+	# Hombros (parte del cuerpo: no se mueven respecto al torso)
+	var sleeve := _colf("sleeve", "suit")
+	for x: float in [-0.28, 0.28]:
+		mb.sphere(Vector3(x, 0.45, -0.02), Vector3(0.09, 0.09, 0.09) * float(style["arm_scale"]), 8, 5, sleeve)
+	_mi(mb.commit_single("cloth"), "DriverBody", driver_pivot)
+	if style["scarf_tail"]:
+		_build_scarf_tail()
+	_build_arms()
+
+	head_pivot = Node3D.new()
+	head_pivot.name = "Head"
+	head_pivot.position = Vector3(0, 0.6, 0.0)
+	head_pivot.scale = Vector3.ONE * float(style["head_scale"])
+	driver_pivot.add_child(head_pivot)
+	_build_head()
+
+
+## Gancho: piernas y calzado (coordenadas del piloto: cadera en el origen, delante -Z).
+func _build_legs(mb: MB) -> void:
 	for s: float in [-1.0, 1.0]:
 		var hip := Vector3(s * 0.13, 0.06, -0.05)
 		var knee := Vector3(s * 0.17, 0.2, -0.46)
@@ -307,17 +440,32 @@ func _build_driver() -> void:
 		mb.tube(hip, knee, 0.1, 0.085, 7, _col("pants"))
 		mb.tube(knee, foot, 0.085, 0.075, 7, _col("pants"))
 		mb.sphere(knee, Vector3(0.088, 0.088, 0.088), 7, 4, _col("pants"))
-		mb.use("rubber")
-		mb.chamfer_box(foot + Vector3(0, 0.03, -0.06), Vector3(0.17, 0.13, 0.27), 0.05, _col("shoe"))
-		mb.chamfer_box(foot + Vector3(0, -0.035, -0.06), Vector3(0.18, 0.04, 0.29), 0.015, _col("shoe_sole"))
-	# --- Torso: sudadera con capucha ---
+		_build_shoe(mb, foot, s)
+
+
+## Gancho: zapatilla en `foot`.
+func _build_shoe(mb: MB, foot: Vector3, _s: float) -> void:
+	mb.use("rubber")
+	mb.chamfer_box(foot + Vector3(0, 0.03, -0.06), Vector3(0.17, 0.13, 0.27), 0.05, _col("shoe"))
+	mb.chamfer_box(foot + Vector3(0, -0.035, -0.06), Vector3(0.18, 0.04, 0.29), 0.015, _col("shoe_sole"))
+
+
+## Torso estándar (cintura y=0, hombros y≈0.45, cuello y≈0.55). Útil para los ganchos.
+func _torso_shell(mb: MB, col: Color, scale_w: float = 1.0) -> void:
 	mb.use("cloth")
 	mb.loft([
-		_hsec(0.0, 0.5, 0.36, 0.1),
-		_hsec(0.22, 0.58, 0.4, 0.12, -0.01),
-		_hsec(0.42, 0.56, 0.36, 0.12, -0.01),
-		_hsec(0.52, 0.36, 0.26, 0.08),
-	], [suit, suit, suit, suit.darkened(0.08), suit, suit, suit, suit.darkened(0.08)])
+		_hsec(0.0, 0.5 * scale_w, 0.36, 0.1),
+		_hsec(0.22, 0.58 * scale_w, 0.4, 0.12, -0.01),
+		_hsec(0.42, 0.56 * scale_w, 0.36, 0.12, -0.01),
+		_hsec(0.52, 0.36 * scale_w, 0.26, 0.08),
+	], [col, col, col, col.darkened(0.08), col, col, col, col.darkened(0.08)])
+
+
+## Gancho: torso y ropa. Por defecto, sudadera con capucha y pañuelo.
+func _build_torso(mb: MB) -> void:
+	var suit := _col("suit")
+	var suit_d := _col("suit_dark")
+	_torso_shell(mb, suit)
 	mb.loft([_hsec(-0.02, 0.52, 0.38, 0.1), _hsec(0.06, 0.53, 0.39, 0.1)], [suit_d], false, false)
 	mb.push_at(Vector3(0, 0.5, 0.15), Vector3(-20, 0, 0))
 	mb.chamfer_box(Vector3.ZERO, Vector3(0.42, 0.16, 0.16), 0.06, suit_d)
@@ -333,9 +481,9 @@ func _build_driver() -> void:
 	# Bufanda / pañuelo al cuello
 	mb.use("cloth")
 	mb.loft([_hsec(0.5, 0.34, 0.28, 0.1), _hsec(0.6, 0.3, 0.25, 0.1)], [_col("scarf")])
-	_mi(mb.commit(), "DriverBody", driver_pivot)
 
-	# Cola de la bufanda (ondea con la velocidad)
+
+func _build_scarf_tail() -> void:
 	var tail_root := Node3D.new()
 	tail_root.name = "ScarfTail"
 	tail_root.position = Vector3(0.06, 0.56, 0.14)
@@ -353,55 +501,68 @@ func _build_driver() -> void:
 		_scarf_tail.append(seg)
 		parent = seg
 
-	# Brazos: segmentos independientes que siguen al volante
-	var unit_upper := _unit_limb(0.075, 0.065, suit)
-	var unit_fore := _unit_limb(0.065, 0.058, suit)
+
+func _build_arms() -> void:
+	var sleeve := _colf("sleeve", "suit")
+	var fore: Color = sleeve if style["forearm"] == null else style["forearm"]
+	var k: float = style["arm_scale"]
+	var unit_upper := _unit_limb(0.075 * k, 0.065 * k, sleeve, "skin" if sleeve == _col("skin") else "cloth")
+	var unit_fore := _unit_limb(0.065 * k, 0.058 * k, fore, "skin" if fore == _col("skin") else "cloth")
 	var hand_mb := MB.new()
-	hand_mb.use("cloth")
+	hand_mb.use("skin" if style["glove"] == style["skin"] else "cloth")
 	hand_mb.sphere(Vector3.ZERO, Vector3(0.08, 0.075, 0.09), 7, 5, _col("glove"))
 	hand_mb.sphere(Vector3(0, 0.05, -0.03), Vector3(0.035, 0.03, 0.04), 5, 3, _col("glove"))
-	hand_mb.chamfer_box(Vector3(0, 0, 0.075), Vector3(0.13, 0.12, 0.05), 0.03, suit_d)
-	var hand_mesh := hand_mb.commit()
+	hand_mb.use("cloth")
+	hand_mb.chamfer_box(Vector3(0, 0, 0.075), Vector3(0.13, 0.12, 0.05), 0.03, _colf("cuff", "suit_dark"))
+	var hand_mesh := hand_mb.commit_single("skin" if style["glove"] == style["skin"] else "cloth")
 	for side: String in ["l", "r"]:
 		_arm_parts[side + "_upper"] = _mi(unit_upper, side + "_upper", driver_pivot)
 		_arm_parts[side + "_fore"] = _mi(unit_fore, side + "_fore", driver_pivot)
 		_arm_parts[side + "_hand"] = _mi(hand_mesh, side + "_hand", driver_pivot)
-		var ball := MB.new()
-		ball.use("cloth")
-		ball.sphere(Vector3.ZERO, Vector3(0.09, 0.09, 0.09), 8, 5, suit)
-		var sb := _mi(ball.commit(), side + "_shoulder", driver_pivot)
-		sb.position = Vector3(-0.28 if side == "l" else 0.28, 0.45, -0.02)
-
-	head_pivot = Node3D.new()
-	head_pivot.name = "Head"
-	head_pivot.position = Vector3(0, 0.6, 0.0)
-	driver_pivot.add_child(head_pivot)
-	_build_head()
 
 
 ## Malla de extremidad de 1 m a lo largo de -Z (se escala en Z para cada longitud).
-func _unit_limb(r1: float, r2: float, col: Color) -> ArrayMesh:
+func _unit_limb(r1: float, r2: float, col: Color, mat: String = "cloth") -> ArrayMesh:
 	var mb := MB.new()
-	mb.use("cloth")
+	mb.use(mat)
 	mb.tube(Vector3.ZERO, Vector3(0, 0, -1.0), r1, r2, 7, col, true)
 	return mb.commit()
 
 
 func _build_head() -> void:
 	var mb := MB.new()
+	var hc := HEAD_CENTER   # centro de la cabeza (grande: proporción chibi)
+	_build_head_shape(mb, hc)
+	_build_hair(mb, hc)
+	_build_head_extras(mb, hc)
+	if style["beard"] != null:
+		_build_beard(mb, hc, style["beard"], String(style["beard_style"]))
+	if style["earring"] != null:
+		mb.use("chrome")
+		for s: float in [-1.0, 1.0]:
+			mb.sphere(hc + Vector3(s * 0.4, -0.11, 0.02), Vector3(0.028, 0.028, 0.028), 6, 3, style["earring"])
+	_mi(mb.commit_single("skin"), "HeadMesh", head_pivot)
+	_build_face(hc)
+
+
+## Gancho: cráneo, cuello, orejas, mofletes y nariz.
+func _build_head_shape(mb: MB, hc: Vector3) -> void:
 	var skin := _col("skin")
-	var hair := _col("hair")
-	var cap := _col("cap")
-	var brim := _col("cap_brim")
-	var hc := Vector3(0, 0.36, 0)   # centro de la cabeza (grande: proporción chibi)
 	mb.use("skin")
 	mb.cylinder(Vector3(0, -0.04, 0), 0.09, 0.14, 7, skin)
 	mb.sphere(hc, Vector3(0.4, 0.37, 0.38), 12, 8, skin)
 	for s: float in [-1.0, 1.0]:
 		mb.sphere(hc + Vector3(s * 0.39, -0.02, 0.03), Vector3(0.07, 0.1, 0.06), 6, 4, skin.darkened(0.06))
-		mb.sphere(hc + Vector3(s * 0.24, -0.13, -0.27), Vector3(0.06, 0.034, 0.03), 6, 3, Color("f29a8f"))
+		if style["blush"]:
+			mb.sphere(hc + Vector3(s * 0.24, -0.13, -0.27), Vector3(0.06, 0.034, 0.03), 6, 3, Color("f29a8f"))
 	mb.sphere(hc + Vector3(0, -0.085, -0.365), Vector3(0.032, 0.026, 0.022), 6, 3, skin.darkened(0.12))
-	# Pelo: nuca y mechones de punta
+
+
+## Gancho: pelo y gorra. Por defecto, pelo de punta y gorra hacia atrás.
+func _build_hair(mb: MB, hc: Vector3) -> void:
+	var hair := _col("hair")
+	var cap := _col("cap")
+	var brim := _col("cap_brim")
 	mb.use("cloth")
 	mb.sphere(hc + Vector3(0, 0.04, 0.1), Vector3(0.4, 0.34, 0.34), 10, 5, hair, PI * 0.3, PI * 0.72)
 	for i in 7:
@@ -420,9 +581,51 @@ func _build_head() -> void:
 	mb.push_at(hc + Vector3(0, 0.17, 0.4), Vector3(-10, 0, 0))
 	mb.frustum(Vector3.ZERO, Vector2(0.44, 0.06), Vector2(0.52, 0.3), 0.04, brim, Vector2(0, 0.15))
 	mb.pop()
-	_mi(mb.commit(), "HeadMesh", head_pivot)
 
-	# Ojos (nodos propios para parpadear)
+
+## Gancho: lo que cada corredor añada a la cabeza (accesorios, piercings...).
+func _build_head_extras(_mb: MB, _hc: Vector3) -> void:
+	pass
+
+
+## Barba facetada que sigue la mandíbula. full = barba recortada, stubble = sombra de
+## barba, goatee = perilla y bigote.
+func _build_beard(mb: MB, hc: Vector3, col: Color, kind: String) -> void:
+	mb.use("cloth")
+	var t := 0.02 if kind == "full" else 0.008
+	if kind != "goatee":
+		# Mandíbula: placas pegadas a la cara de patilla a patilla, POR DEBAJO de la boca
+		# (la boca y los mofletes quedan a la vista)
+		var n := 10
+		for i in n:
+			var a0 := lerpf(-1.5, 1.5, float(i) / n)
+			var a1 := lerpf(-1.5, 1.5, float(i + 1) / n)
+			var p0 := _jaw_point(hc, a0)
+			var p1 := _jaw_point(hc, a1)
+			var mid := (p0 + p1) * 0.5
+			var out := Vector3(mid.x - hc.x, -0.35, mid.z - hc.z).normalized()
+			var w := lerpf(0.13, 0.09, absf(a0) / 1.5)
+			mb.slab(p0 + out * t, p1 + out * t, w, w, t + 0.012, col, out)
+		# Barbilla
+		mb.sphere(hc + Vector3(0, -0.3, -0.24), Vector3(0.13, 0.065 + t, 0.09 + t), 8, 4, col)
+	# Bigote fino y perilla bajo el labio
+	mb.push_at(hc + Vector3(0, -0.128, -0.352), Vector3(8, 0, 0))
+	mb.chamfer_box(Vector3.ZERO, Vector3(0.15, 0.022, 0.025), 0.008, col)
+	mb.pop()
+	mb.sphere(hc + Vector3(0, -0.235, -0.325), Vector3(0.05, 0.035, 0.03), 6, 3, col)
+
+
+## Punto de la línea de la mandíbula (a = 0 barbilla, ±1.5 junto a las orejas).
+func _jaw_point(hc: Vector3, a: float) -> Vector3:
+	var y := -0.26 + (1.0 - cos(a)) * 0.2
+	var r := 0.33 + (1.0 - cos(a)) * 0.05
+	return hc + Vector3(sin(a) * 0.37, y, -cos(a) * r)
+
+
+## Ojos (con párpado), cejas y bocas según `style`.
+func _build_face(hc: Vector3) -> void:
+	var es: float = style["eye_size"]
+	var lid: float = style["eye_lid"]
 	for s: float in [-1.0, 1.0]:
 		var eye := Node3D.new()
 		eye.name = "Eye"
@@ -430,44 +633,75 @@ func _build_head() -> void:
 		head_pivot.add_child(eye)
 		var emb := MB.new()
 		emb.use("skin")
-		emb.sphere(Vector3.ZERO, Vector3(0.088, 0.108, 0.04), 9, 5, Color("fbfbf7"))
-		emb.sphere(Vector3(0, -0.006, -0.02), Vector3(0.064, 0.082, 0.03), 9, 4, _col("eye"))
-		emb.sphere(Vector3(0, -0.012, -0.035), Vector3(0.036, 0.05, 0.02), 7, 3, Color("120d0a"))
-		emb.sphere(Vector3(s * 0.024, 0.036, -0.05), Vector3(0.021, 0.023, 0.015), 5, 2, Color.WHITE)
-		emb.sphere(Vector3(-s * 0.02, -0.04, -0.048), Vector3(0.01, 0.01, 0.01), 4, 2, Color.WHITE)
-		_mi(emb.commit(), "EyeMesh", eye)
+		emb.sphere(Vector3.ZERO, Vector3(0.088, 0.108, 0.04) * es, 9, 5, Color("fbfbf7"))
+		emb.sphere(Vector3(0, -0.006, -0.02) * es, Vector3(0.064, 0.082, 0.03) * es, 9, 4, _col("eye"))
+		emb.sphere(Vector3(0, -0.012, -0.035) * es, Vector3(0.036, 0.05, 0.02) * es, 7, 3, Color("120d0a"))
+		if style["eye_shine"]:
+			emb.sphere(Vector3(s * 0.024, 0.036, -0.05) * es, Vector3(0.021, 0.023, 0.015) * es, 5, 2, Color.WHITE)
+			emb.sphere(Vector3(-s * 0.02, -0.04, -0.048) * es, Vector3(0.01, 0.01, 0.01) * es, 4, 2, Color.WHITE)
+		else:
+			emb.sphere(Vector3(s * 0.015, 0.02, -0.05) * es, Vector3(0.01, 0.011, 0.01) * es, 4, 2, Color.WHITE)
+		if lid > 0.0:
+			# Párpado superior: casquete de piel que tapa la parte alta del ojo
+			emb.sphere(Vector3(0, 0, -0.004), Vector3(0.096, 0.116, 0.052) * es, 9, 3, _col("skin").darkened(0.05),
+					0.0, PI * lid)
+			emb.use("cloth")
+			var ly := cos(PI * lid) * 0.116 * es
+			emb.box(Vector3(0, ly, -0.045 * es), Vector3(0.17 * es, 0.016, 0.02), Color("2a1a12"))
+		_mi(emb.commit_single("skin"), "EyeMesh", eye)
 		_eyes.append(eye)
 		var brow := Node3D.new()
-		brow.position = hc + Vector3(s * 0.15, 0.115, -0.345)
-		brow.rotation.z = -s * deg_to_rad(8)
+		brow.position = hc + Vector3(s * 0.15, float(style["brow_y"]), -0.345)
+		brow.rotation.z = -s * deg_to_rad(float(style["brow_tilt"]))
 		head_pivot.add_child(brow)
 		var bmb := MB.new()
 		bmb.use("cloth")
-		bmb.chamfer_box(Vector3.ZERO, Vector3(0.12, 0.028, 0.03), 0.01, _col("hair"))
-		_mi(bmb.commit(), "Brow", brow)
+		bmb.chamfer_box(Vector3.ZERO, style["brow_size"], 0.01, _col("hair"))
+		_mi(bmb.commit_single("cloth"), "Brow", brow)
 		_brows.append(brow)
-	# Bocas: sonrisa normal y sonrisa abierta (turbo/derrape)
-	_mouth_smile = Node3D.new()
-	_mouth_smile.position = hc + Vector3(0, -0.17, -0.338)
-	head_pivot.add_child(_mouth_smile)
-	var smb := MB.new()
-	smb.use("skin")
-	smb.box(Vector3(0, -0.007, 0), Vector3(0.07, 0.02, 0.025), Color("7a2e2e"))
-	for s: float in [-1.0, 1.0]:
-		smb.push_at(Vector3(s * 0.055, 0.005, 0), Vector3(0, 0, s * 25.0))
-		smb.box(Vector3.ZERO, Vector3(0.05, 0.02, 0.025), Color("7a2e2e"))
-		smb.pop()
-	_mi(smb.commit(), "Smile", _mouth_smile)
-	_mouth_grin = Node3D.new()
-	_mouth_grin.position = hc + Vector3(0, -0.165, -0.335)
+	_brow_base_y = hc.y + float(style["brow_y"])
+	_mouth_smile = _make_mouth(String(style["mouth"]), hc)
+	_mouth_grin = _make_mouth(String(style["mouth_excited"]), hc)
 	_mouth_grin.visible = false
-	head_pivot.add_child(_mouth_grin)
-	var gmb := MB.new()
-	gmb.use("skin")
-	gmb.sphere(Vector3.ZERO, Vector3(0.085, 0.055, 0.03), 9, 4, Color("6b1f2a"), PI * 0.5, PI)
-	gmb.box(Vector3(0, -0.006, -0.014), Vector3(0.15, 0.02, 0.02), Color.WHITE)
-	gmb.sphere(Vector3(0, -0.038, -0.014), Vector3(0.04, 0.012, 0.015), 6, 2, Color("ef6f86"))
-	_mi(gmb.commit(), "Grin", _mouth_grin)
+
+
+## Bocas: smile, flat (línea), smirk (media sonrisa), grin (sonrisa abierta), shout (grito).
+func _make_mouth(kind: String, hc: Vector3) -> Node3D:
+	var node := Node3D.new()
+	node.name = "Mouth_" + kind
+	node.position = hc + Vector3(0, -0.17, -0.338)
+	head_pivot.add_child(node)
+	var m := MB.new()
+	m.use("skin")
+	var lip := Color("7a2e2e")
+	match kind:
+		"flat":
+			m.box(Vector3(0, -0.004, 0), Vector3(0.11, 0.018, 0.025), lip.darkened(0.1))
+		"smirk":
+			m.box(Vector3(-0.01, -0.006, 0), Vector3(0.09, 0.018, 0.025), lip)
+			m.push_at(Vector3(0.05, 0.004, 0), Vector3(0, 0, 25.0))
+			m.box(Vector3.ZERO, Vector3(0.045, 0.018, 0.025), lip)
+			m.pop()
+		"grin":
+			m.sphere(Vector3(0, 0.005, 0.003), Vector3(0.085, 0.055, 0.03), 9, 4, Color("6b1f2a"), PI * 0.5, PI)
+			m.box(Vector3(0, -0.001, -0.011), Vector3(0.15, 0.02, 0.02), Color.WHITE)
+			m.sphere(Vector3(0, -0.033, -0.011), Vector3(0.04, 0.012, 0.015), 6, 2, Color("ef6f86"))
+		"shout":
+			# Boca muy abierta (algo más baja que las demás): hueco oscuro, dientes arriba y lengua
+			node.position.y -= 0.035
+			node.position.z += 0.012
+			m.sphere(Vector3(0, -0.01, -0.006), Vector3(0.09, 0.07, 0.04), 10, 6, Color("4a1420"))
+			m.box(Vector3(0, 0.042, -0.036), Vector3(0.13, 0.024, 0.02), Color.WHITE)
+			m.sphere(Vector3(0, -0.05, -0.03), Vector3(0.055, 0.024, 0.02), 7, 3, Color("e8697e"))
+			m.sphere(Vector3(0, -0.01, 0.0), Vector3(0.1, 0.08, 0.04), 10, 6, lip.darkened(0.15))
+		_:
+			m.box(Vector3(0, -0.007, 0), Vector3(0.07, 0.02, 0.025), lip)
+			for s: float in [-1.0, 1.0]:
+				m.push_at(Vector3(s * 0.055, 0.005, 0), Vector3(0, 0, s * 25.0))
+				m.box(Vector3.ZERO, Vector3(0.05, 0.02, 0.025), lip)
+				m.pop()
+	_mi(m.commit_single("skin"), "MouthMesh", node)
+	return node
 
 
 # =============================================================================
@@ -489,10 +723,11 @@ func _wheel_mesh(r: float, w: float) -> ArrayMesh:
 	mb.lathe(prof, 16, [tire.darkened(0.3), tire, tire, tread, tread, tread, tire, tire],
 			{3: tire, 4: tire.darkened(0.2), 5: tire}, true)
 	# Franja de color en el flanco exterior
-	mb.use("paint")
-	var band0 := lerpf(ri + 0.014, r - 0.06, 0.3)
-	var band1 := lerpf(ri + 0.014, r - 0.06, 0.62)
-	mb.lathe(PackedVector2Array([Vector2(hw + 0.003, band0), Vector2(hw + 0.003, band1)]), 16, [_col("accent")])
+	if style["tire_band"]:
+		mb.use("paint")
+		var band0 := lerpf(ri + 0.014, r - 0.06, 0.3)
+		var band1 := lerpf(ri + 0.014, r - 0.06, 0.62)
+		mb.lathe(PackedVector2Array([Vector2(hw + 0.003, band0), Vector2(hw + 0.003, band1)]), 16, [_col("accent")])
 	# Llanta: buje cromado, plato hundido oscuro y labio de color
 	var rr := ri + 0.01
 	mb.use("chrome")
@@ -503,6 +738,15 @@ func _wheel_mesh(r: float, w: float) -> ArrayMesh:
 	mb.lathe(PackedVector2Array([Vector2(hw - 0.03, 0.075), Vector2(hw - 0.03, rr * 0.86)]), 16, [_col("rim_dish")])
 	mb.lathe(PackedVector2Array([Vector2(hw - 0.03, rr * 0.86), Vector2(hw + 0.012, rr), Vector2(hw - 0.01, rr + 0.004)]), 16,
 			[_col("rim"), _col("rim").darkened(0.2)])
+	if style["rim_style"] == "dish":
+		# Llanta de plato: disco liso con tapacubos de color (sin radios)
+		mb.use("paint")
+		mb.lathe(PackedVector2Array([Vector2(hw - 0.02, rr * 0.86), Vector2(hw + 0.005, rr * 0.5), Vector2(hw + 0.02, 0.09)]), 16,
+				[_col("rim").darkened(0.1), _col("rim")])
+		mb.push_at(Vector3(hw + 0.02, 0, 0), Vector3(0, 0, -90))
+		mb.cylinder(Vector3.ZERO, 0.09, 0.03, 12, _colf("hub", "body"))
+		mb.pop()
+		return mb.commit_single("rubber")
 	# Cinco radios y tuercas
 	for i in 5:
 		var a := TAU * i / 5.0
@@ -514,23 +758,21 @@ func _wheel_mesh(r: float, w: float) -> ArrayMesh:
 		mb.box(Vector3(hw + 0.03, 0, 0) + d * 0.045, Vector3(0.02, 0.018, 0.018), _col("chrome").darkened(0.3))
 	mb.use("paint")
 	mb.push_at(Vector3(hw + 0.045, 0, 0), Vector3(0, 0, -90))
-	mb.cylinder(Vector3.ZERO, 0.03, 0.012, 8, _col("body"))
+	mb.cylinder(Vector3.ZERO, 0.03, 0.012, 8, _colf("hub", "body"))
 	mb.pop()
-	return mb.commit()
+	return mb.commit_single("rubber")
 
 
 func _build_wheels() -> void:
-	var front := _wheel_mesh(0.28, 0.26)
-	var rear := _wheel_mesh(0.35, 0.36)
-	var caliper := MB.new()
-	caliper.use("paint")
-	caliper.chamfer_box(Vector3(0, 0.12, 0.05), Vector3(0.06, 0.08, 0.12), 0.02, Color("d62828"))
-	var caliper_mesh := caliper.commit()
+	var front := _wheel_mesh(front_size.x, front_size.y)
+	var rear := _wheel_mesh(rear_size.x, rear_size.y)
+	var fw := front_wheel
+	var rw := rear_wheel
 	var defs := [
-		[Vector3(-0.76, 0.28, -0.88), front, true, 0.28, -1.0],
-		[Vector3(0.76, 0.28, -0.88), front, true, 0.28, 1.0],
-		[Vector3(-0.8, 0.35, 0.85), rear, false, 0.35, -1.0],
-		[Vector3(0.8, 0.35, 0.85), rear, false, 0.35, 1.0],
+		[Vector3(-fw.x, fw.y, fw.z), front, true, front_size.x, -1.0],
+		[Vector3(fw.x, fw.y, fw.z), front, true, front_size.x, 1.0],
+		[Vector3(-rw.x, rw.y, rw.z), rear, false, rear_size.x, -1.0],
+		[Vector3(rw.x, rw.y, rw.z), rear, false, rear_size.x, 1.0],
 	]
 	for d in defs:
 		var steer := Node3D.new()
@@ -543,17 +785,15 @@ func _build_wheels() -> void:
 		var mesh := _mi(d[1], "WheelMesh", spin)
 		if d[4] < 0.0:
 			mesh.rotation.y = PI  # cara exterior hacia fuera
-		var cal := _mi(caliper_mesh, "Caliper", steer)
-		cal.position.x = -float(d[4]) * 0.05
 		if d[2]:
 			steer_pivots.append(steer)
 		wheel_spin.append(spin)
 		wheel_radius.append(d[3])
 	var mb := MB.new()
 	mb.use("metal")
-	mb.tube(Vector3(-0.76, 0.28, -0.88), Vector3(0.76, 0.28, -0.88), 0.03, 0.03, 6, _col("metal").darkened(0.3))
-	mb.tube(Vector3(-0.8, 0.35, 0.85), Vector3(0.8, 0.35, 0.85), 0.04, 0.04, 6, _col("metal").darkened(0.3))
-	_mi(mb.commit(), "Axles", self)
+	mb.tube(Vector3(-fw.x, fw.y, fw.z), Vector3(fw.x, fw.y, fw.z), 0.03, 0.03, 6, _col("metal").darkened(0.3))
+	mb.tube(Vector3(-rw.x, rw.y, rw.z), Vector3(rw.x, rw.y, rw.z), 0.04, 0.04, 6, _col("metal").darkened(0.3))
+	_mi(mb.commit_single("metal"), "Axles", self)
 
 
 # =============================================================================
@@ -638,7 +878,7 @@ func update_visual(st: Dictionary, delta: float) -> void:
 	_mouth_grin.visible = excited
 	_mouth_smile.visible = not excited
 	for b in _brows:
-		b.position.y = lerpf(b.position.y, 0.475 + (0.03 if excited else 0.0), k)
+		b.position.y = lerpf(b.position.y, _brow_base_y + (0.03 if excited else 0.0), k)
 
 	# Bufanda: se levanta con la velocidad y ondea
 	var lift := clampf(speed / 25.0, 0.0, 1.0)

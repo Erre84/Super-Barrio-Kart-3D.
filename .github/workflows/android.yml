@@ -76,12 +76,16 @@ jobs:
           name: SuperBarrioKart3D-apk
           path: ${{ env.APK }}
 
-      - name: Publicar en la release "apk-prueba"
+      - name: Publicar la APK en su release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete apk-prueba --yes --cleanup-tag || true
-          gh release create apk-prueba "$APK" --prerelease \
+          # La v0.6.3 estable se queda en "apk-prueba"; las ramas de la v0.7 (corredores)
+          # publican en "apk-v0.7-prueba" para no pisarla.
+          TAG=apk-prueba
+          case "$GITHUB_REF_NAME" in feature/v0.7*) TAG=apk-v0.7-prueba ;; esac
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" "$APK" --prerelease \
             --target "$GITHUB_SHA" \
             --title "APK de prueba (${GITHUB_REF_NAME}, ${GITHUB_SHA::7})" \
             --notes "APK de depuración generado automáticamente desde la rama ${GITHUB_REF_NAME}. Instrucciones de instalación en docs/ANDROID.md."

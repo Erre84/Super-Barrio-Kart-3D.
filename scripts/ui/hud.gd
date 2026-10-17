@@ -215,7 +215,7 @@ func _ready() -> void:
 			+ "R reaparecer · Esc pausa · F3 controles táctiles")
 
 	_pause_panel = PanelContainer.new()
-	_place(_pause_panel, Control.PRESET_CENTER, Vector2(-210, -115), Vector2(420, 230))
+	_place(_pause_panel, Control.PRESET_CENTER, Vector2(-230, -150), Vector2(460, 300))
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.07, 0.08, 0.15, 0.9)
 	sb.border_color = Color("ffd23f")
@@ -239,6 +239,13 @@ func _ready() -> void:
 	restart.add_theme_font_size_override("font_size", 26)
 	restart.pressed.connect(_on_restart)
 	vb.add_child(restart)
+	var menu := Button.new()
+	menu.text = "Cambiar corredor o circuito"
+	menu.add_theme_font_size_override("font_size", 26)
+	menu.pressed.connect(func():
+		get_tree().paused = false
+		get_tree().change_scene_to_file("res://scenes/menu.tscn"))
+	vb.add_child(menu)
 	_pause_panel.visible = false
 	root.add_child(_pause_panel)
 

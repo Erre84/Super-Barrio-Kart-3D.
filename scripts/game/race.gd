@@ -12,6 +12,7 @@ const KartScript := preload("res://scripts/kart/kart.gd")
 const TrackScript := preload("res://scripts/track/track_el_prat.gd")
 const HudScript := preload("res://scripts/ui/hud.gd")
 const Airplane := preload("res://scripts/track/airplane.gd")
+const GameState := preload("res://scripts/core/game_state.gd")
 
 const TOTAL_LAPS := 3
 const CHECKPOINTS := [0.25, 0.5, 0.75]
@@ -45,6 +46,7 @@ func _ready() -> void:
 	track.build()
 
 	kart = KartScene.instantiate()
+	kart.racer_id = GameState.racer_id
 	kart.track = track
 	add_child(kart)
 	kart.place(track.start_transform(0))
