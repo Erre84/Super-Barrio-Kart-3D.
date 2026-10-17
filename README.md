@@ -4,6 +4,8 @@ Arcade de karts **poligonal** para **PC y Android**, hecho con **Godot 4** y **G
 Proyecto independiente que sucede a *Super Barrio Kart v16* (2D): mismo concepto, ambiente
 urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
+> **Versión 0.6.2 (prueba):** mini-turbo con menos fuerza pero más duración.
+>
 > **Versión 0.6.1:** yendo lento no derrapa; hace falta ir algo por encima de la media
 > (~65 km/h), sin necesidad de ir a tope.
 >

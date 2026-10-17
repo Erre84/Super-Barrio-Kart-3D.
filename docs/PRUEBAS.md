@@ -19,6 +19,21 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
+## Resultados de la v0.6.2: mini-turbo menos fuerte y más largo (prueba)
+
+Petición: el turbo aún se ve un poco exagerado; que tenga menos fuerza pero dure un poco más.
+Curva de un mini-turbo de nivel 3 (`tests/boost_curve.gd`, km/h cada 0,5 s al pisar):
+
+| | Curva | Pico | Tiempo por encima de la punta |
+|---|---|---|---|
+| v0.6.1 | 64 → 104 → 127 → 127 → 112 → 104 | 127 km/h | 1,7 s |
+| v0.6.2 | 62 → 96 → 121 → 121 → 121 → 121 → 106 | 121 km/h | 2,4 s |
+
+Valores: `mini_turbo_accel` 11 → 7,5 m/s², `mini_turbo_speed` 1,12/1,17/1,22 → 1,08/1,12/1,16,
+`mini_turbo_time` 1,0/1,3/1,6 → 1,6/2,0/2,5 s, `mini_turbo_kick` 1,0/1,4/1,8 → 0,6/0,9/1,2 m/s,
+`boost_fade` 5 → 4. Golpe de cámara y vibración algo más suaves. Subida máx. 10,3 km/h por
+0,1 s (antes 13,5). 39/39 OK; vuelta del piloto automático 39,9 s, 0 reapariciones.
+
 ## Resultados de la v0.6.1: velocidad mínima para derrapar
 
 Matiz del usuario: yendo lento no se debe poder derrapar, pero tampoco hace falta ir a tope;

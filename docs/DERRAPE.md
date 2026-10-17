@@ -18,8 +18,9 @@ el kart derrapa a un lado, luego al otro, y cada derrape suelta su mini-turbo. M
 corregir la trayectoria: 8 derrapes y 7 mini-turbos seguidos. Yendo lento no derrapa:
 hace falta ir algo por encima de la media (~65 km/h), sin necesidad de ir a tope.
 
-El **mini-turbo es un empuje parejo**, no un tirón: sube unos 7 km/h por décima de segundo
-hasta 116 / 122 / 127 km/h (según el nivel) durante 1,0 / 1,3 / 1,6 s y se apaga suave.
+El **mini-turbo es un empuje parejo**, no un tirón (v0.6.2: menos fuerza y más duración):
+sube unos 5 km/h por décima de segundo hasta 113 / 117 / 121 km/h (según el nivel) durante
+1,6 / 2,0 / 2,5 s y se apaga suave.
 En la v0.5 subía hasta 38 km/h de golpe en una décima y llegaba a 136-144 km/h.
 
 ## Cómo se hace (v0.4: más accesible)
@@ -59,8 +60,8 @@ En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T
    pasa a "¡endereza y PISA!" (turbo cargado). Al **volver a pisar** cuando el kart ya está
    saliendo del derrape (menos de 16° de cruce): **¡MINI-TURBO!** Si no habías soltado, al
    quedar recto aparece "¡SUELTA Y PISA!" y tienes 1,2 s para hacerlo.
-   - El impulso (v0.6) empuja de forma constante hasta 116 / 122 / 127 km/h según el nivel,
-     durante 1,0 / 1,3 / 1,6 s. Se nota aunque salgas lento del derrape: de 60 a 127 km/h.
+   - El impulso (v0.6.2) empuja de forma constante hasta 113 / 117 / 121 km/h según el nivel,
+     durante 1,6 / 2,0 / 2,5 s. Se nota aunque salgas lento del derrape: de 60 a 121 km/h.
 
 **Encadenar.** Después de un mini-turbo puedes provocar otro enseguida, también en recta:
 volantazo a un lado → contravolante → suelta y pisa → volantazo al otro…
