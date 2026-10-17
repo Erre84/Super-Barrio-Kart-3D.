@@ -19,6 +19,38 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
+## Resultados de la v0.6.3: girar más tras un choque y mini-turbo hacia delante
+
+Peticiones: (1) tras chocar con la pared cuesta enderezar porque a poca velocidad gira poco;
+(2) el impulso del mini-turbo debe ir hacia donde apunta el kart, no hacia donde se iba el derrape.
+
+**Giro a baja velocidad** (`tests/low_speed_turn.gd`):
+
+| | v0.6.2 | v0.6.3 |
+|---|---|---|
+| Desde parado, gas + volante a fondo, 0,5 s | 32° | **58°** |
+| Ídem, 1 s | 85° | **118°** |
+| Radio de giro a 20 km/h | 2,8 m | 2,1 m |
+| Radio a 50 / 80 / 104 km/h | 7,9 / 26,9 / 38,2 m | igual |
+
+Casi parado, acelerando o frenando, el kart puede pivotar (`pivot_steer`); por debajo de
+~54 km/h gira hasta 1,45× más (`low_speed_steer`, `low_speed_steer_until`). A velocidad de
+derrape no cambia nada.
+
+**Dirección del mini-turbo** (`tests/turbo_direction.gd`): al saltar, toda la velocidad se
+reorienta hacia el morro (`mini_turbo_redirect_keep`), se corta la inercia de giro del
+derrape (`mini_turbo_yaw_keep`) y hay 0,25 s de agarre extra (`mini_turbo_straight_time`).
+
+| Saltando a 14° de cruce y soltando el volante | v0.6.2 | v0.6.3 |
+|---|---|---|
+| Velocidad frente al morro (máx.) | 2,2° | 0,0° |
+| Desplazamiento lateral en 0,6 s | 0,76 m | 0,49 m |
+| Zigzag: cuánto se aparta de la recta | ±11,4 m | ±6,6 m |
+
+Pruebas nuevas: el mini-turbo empuja hacia donde apunta el kart; casi parado gira mucho; a
+alta velocidad el giro no se vuelve nervioso. 42/42 OK; vuelta del piloto automático 39,3 s,
+0 reapariciones.
+
 ## Resultados de la v0.6.2: mini-turbo menos fuerte y más largo (prueba)
 
 Petición: el turbo aún se ve un poco exagerado; que tenga menos fuerza pero dure un poco más.

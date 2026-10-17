@@ -62,6 +62,8 @@ func _run() -> void:
 	await _test_chain_on_straight()
 	await _test_zigzag_chain()
 	await _test_boost_smooth()
+	await _test_boost_goes_forward()
+	await _test_low_speed_turn()
 	# --- Generales ---
 	await _test_reverse()
 	await _test_turbo_top_speed()
@@ -674,3 +676,56 @@ func _test_boost_smooth() -> void:
 		prev = v
 	_check("mini-turbo como empuje parejo (sin tirón)", _boosts("success") == 1 and max_jump < 16.0 and vmax > 110.0 and vmax < 132.0,
 			"subida máx. %.1f km/h por 0,1 s, pico %.0f km/h" % [max_jump, vmax])
+
+
+func _vel_vs_nose() -> float:
+	var fwd: Vector3 = -kart.global_transform.basis.z
+	return rad_to_deg(absf(Vector2(fwd.x, fwd.z).angle_to(Vector2(kart.velocity.x, kart.velocity.z))))
+
+
+## El mini-turbo empuja hacia donde apunta el morro, no hacia donde se iba el derrape.
+func _test_boost_goes_forward() -> void:
+	await _at_speed(240)
+	_inp({"accelerate": 0.0, "steer_right": 1.0})
+	await _frames(40)
+	_inp({"accelerate": 0.0, "steer_left": 1.0})
+	while _slip() > 14.0:
+		await physics_frame
+	_inp({"accelerate": 1.0})
+	var guard := 0
+	while _boosts("success") == 0 and guard < 60:
+		await physics_frame
+		guard += 1
+	var fwd0: Vector3 = -kart.global_transform.basis.z
+	fwd0.y = 0.0
+	fwd0 = fwd0.normalized()
+	var p0: Vector3 = kart.global_position
+	var amax := 0.0
+	for i in 36:
+		await physics_frame
+		amax = maxf(amax, _vel_vs_nose())
+	var d: Vector3 = kart.global_position - p0
+	var side := absf(d.dot(Vector3(-fwd0.z, 0.0, fwd0.x)))
+	_check("el mini-turbo empuja hacia donde apunta el kart", _boosts("success") == 1 and amax < 1.5 and side < 0.7,
+			"velocidad frente al morro máx. %.1f°; en 0,6 s avanza %.1f m y se va de lado %.2f m" % [amax, d.dot(fwd0), side])
+
+
+## Tras un choque (casi parado) se puede girar mucho; a alta velocidad el giro no cambia.
+func _test_low_speed_turn() -> void:
+	_release_all()
+	kart.track = null
+	kart.on_road = true
+	kart.place(Transform3D(Basis(), Vector3(900, 0.05, 900)))
+	await _frames(10)
+	var y0: float = kart.rotation.y
+	_inp({"accelerate": 1.0, "steer_left": 1.0})
+	await _frames(30)
+	var turned := rad_to_deg(absf(wrapf(kart.rotation.y - y0, -PI, PI)))
+	_check("casi parado (tras un choque) gira mucho", turned > 50.0, "desde parado, gas y volante a fondo: %.0f° en 0,5 s" % turned)
+	await _at_speed(240)
+	var yaw_sum := 0.0
+	for i in 40:
+		_inp({"accelerate": 1.0, "steer_left": 0.35})
+		await physics_frame
+		if i >= 20: yaw_sum += absf(kart.yaw_rate)
+	_check("a alta velocidad el giro no se vuelve nervioso", yaw_sum / 20.0 < 0.6, "35 %% de volante a %.0f km/h: %.2f rad/s" % [kart.get_speed_kmh(), yaw_sum / 20.0])
