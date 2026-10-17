@@ -4,6 +4,10 @@ Arcade de karts **poligonal** para **PC y Android**, hecho con **Godot 4** y **G
 Proyecto independiente que sucede a *Super Barrio Kart v16* (2D): mismo concepto, ambiente
 urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
+> **Versión 0.7.0 (corredores, en curso):** menú con selección de corredor y de circuito, y
+> los primeros corredores de la v16 en 3D: **Zule** (Oxygen Kart) y **Dami** (batería roja).
+> Los otros 12 están en camino. La física de la v0.6.3 no cambia. Ver [`docs/CORREDORES.md`](docs/CORREDORES.md).
+>
 > **Versión 0.6.3:** gira mucho más a baja velocidad (para recuperarse tras un choque) y el
 > mini-turbo empuja hacia donde apunta el kart.
 >

@@ -37,10 +37,15 @@ signal landed(impact: float)
 signal drift_event(kind: String, level: int)
 
 const KartModel := preload("res://scripts/kart/kart_model.gd")
+const Roster := preload("res://scripts/racers/roster.gd")
 const KartEffects := preload("res://scripts/kart/kart_effects.gd")
 const KartAudio := preload("res://scripts/kart/kart_audio.gd")
 
 enum DriftState { NONE, SLIDING, WINDOW }
+
+## Corredor (scripts/racers/roster.gd). Solo cambia el modelo 3D: la física es la misma
+## para todos, como en la v16 (carrera justa).
+@export var racer_id := "zule"
 
 @export_group("Motor")
 @export var max_speed := 29.0          ## m/s (≈105 km/h)
@@ -187,7 +192,7 @@ func _ready() -> void:
 	shape.position = Vector3(0, 0.42, 0.05)
 	add_child(shape)
 
-	model = KartModel.new()
+	model = Roster.make_model(racer_id)
 	model.name = "Model"
 	add_child(model)
 	model.build()

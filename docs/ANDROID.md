@@ -3,6 +3,12 @@
 GitHub compila automáticamente un **APK de prueba** cada vez que se suben cambios
 (`.github/workflows/android.yml`) y lo publica en la página de *Releases* del repositorio.
 
+> **Dos APK de prueba:**
+> - **v0.7 (corredores, en desarrollo):** <https://github.com/Erre84/Super-Barrio-Kart-3D./releases/tag/apk-v0.7-prueba>
+> - **v0.6.3 (última estable):** <https://github.com/Erre84/Super-Barrio-Kart-3D./releases/tag/apk-prueba>
+>
+> Las dos son la misma app: la que instales sustituye a la otra.
+
 ## Requisitos
 
 - Android 7.0 o superior (en la práctica, cualquier móvil de 2017 en adelante).

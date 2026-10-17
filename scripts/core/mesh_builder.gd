@@ -407,5 +407,38 @@ func commit(override: Material = null) -> ArrayMesh:
 	return mesh
 
 
+## Construye un ArrayMesh de UNA sola superficie con el material `key` (los colores van en
+## los vértices). Una superficie = una llamada de dibujo: ideal para piezas pequeñas.
+func commit_single(key: String = "paint") -> ArrayMesh:
+	var tmp := commit()
+	return merge_surfaces([[tmp, Transform3D.IDENTITY]], material(key))
+
+
+## Une las superficies de varias mallas (cada una con su transformación) agrupándolas por
+## material: devuelve una malla con una superficie por material distinto. Con `single`,
+## todas van a una única superficie con ese material.
+static func merge_surfaces(items: Array, single: Material = null) -> ArrayMesh:
+	var groups := {}     # material -> SurfaceTool
+	var order := []
+	for it in items:
+		var m: Mesh = it[0]
+		var xf: Transform3D = it[1]
+		for i in m.get_surface_count():
+			var mat: Material = single if single != null else m.surface_get_material(i)
+			if not groups.has(mat):
+				var st := SurfaceTool.new()
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				groups[mat] = st
+				order.append(mat)
+			(groups[mat] as SurfaceTool).append_from(m, i, xf)
+	var out := ArrayMesh.new()
+	for mat in order:
+		var before := out.get_surface_count()
+		(groups[mat] as SurfaceTool).commit(out)
+		if out.get_surface_count() > before:
+			out.surface_set_material(before, mat)
+	return out
+
+
 func is_empty() -> bool:
 	return tri_count == 0

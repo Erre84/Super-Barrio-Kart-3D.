@@ -12,8 +12,8 @@ config_version=5
 
 config/name="Super Barrio Kart 3D"
 config/description="Arcade de karts low-poly ambientado en El Prat."
-config/version="0.6.3"
-run/main_scene="res://scenes/main.tscn"
+config/version="0.7.0"
+run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 
