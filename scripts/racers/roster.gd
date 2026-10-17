@@ -38,6 +38,13 @@ const RACERS := [
 
 const DEFAULT_ID := "zule"
 
+## Corredores con modelo 3D propio (scripts/racers/<id>.gd). Lista explícita: en la APK
+## exportada los .gd se guardan compilados, así que no se comprueba si existe el archivo.
+const MODELED := {
+	"zule": preload("res://scripts/racers/zule.gd"),
+	"dami": preload("res://scripts/racers/dami.gd"),
+}
+
 
 static func ids() -> Array:
 	var out := []
@@ -59,7 +66,7 @@ static func model_path(id: String) -> String:
 
 ## ¿Tiene ya modelo 3D propio?
 static func is_modeled(id: String) -> bool:
-	return ResourceLoader.exists(model_path(id))
+	return MODELED.has(id)
 
 
 static func modeled_ids() -> Array:
@@ -72,6 +79,6 @@ static func modeled_ids() -> Array:
 
 ## Crea el modelo 3D del corredor (o el piloto provisional si aún no tiene).
 static func make_model(id: String) -> Node3D:
-	var path := model_path(id) if is_modeled(id) else "res://scripts/kart/kart_model.gd"
-	var m: Node3D = load(path).new()
-	return m
+	if MODELED.has(id):
+		return MODELED[id].new()
+	return load("res://scripts/kart/kart_model.gd").new()
