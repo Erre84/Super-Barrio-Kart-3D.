@@ -1,0 +1,16 @@
+# Godot 4
+.godot/
+/android/
+*.translation
+export.cfg
+export_credentials.cfg
+*.tmp
+# Builds
+/build/
+*.apk
+*.aab
+*.exe
+*.pck
+*.x86_64
+# Capturas de pruebas locales
+/test_output/
