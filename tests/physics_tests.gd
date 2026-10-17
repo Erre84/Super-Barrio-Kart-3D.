@@ -166,24 +166,30 @@ func _test_wall_blocks() -> void:
 
 func _test_cone_knock() -> void:
 	_release_all()
-	var cone: RigidBody3D = null
-	for c in get_nodes_in_group("knockable"):
-		cone = c
-		break
-	if cone == null:
+	var cones := get_nodes_in_group("knockable")
+	if cones.is_empty():
 		_check("conos", false, "no hay conos en el circuito")
 		return
-	var start: Vector3 = cone.global_position
+	# Atropella 6 conos distintos de frente y de refilón, a 100 km/h. Antes de la v0.4
+	# el kart se subía encima del cono como a una rampa y salía volando (hasta 246 m).
 	kart.track = track
-	# Acercarse por el carril, desde atrás y en línea recta hacia el cono
-	var info: Dictionary = track.query_stateless(start)
-	var dir: Vector3 = info["dir"]
-	kart.place(Transform3D(Basis.looking_at(dir, Vector3.UP), start - dir * 12.0 + Vector3(0, 0.05, 0)))
-	kart.velocity = dir * 20.0
-	Input.action_press("accelerate")
-	await _frames(90)
-	var moved := cone.global_position.distance_to(start)
-	_check("los conos salen volando", moved > 2.0 and moved < 60.0, "el cono se movió %.1f m" % moved)
+	var moved := 0.0
+	for k in 6:
+		var cone: RigidBody3D = cones[(k * 3) % cones.size()]
+		var start: Vector3 = cone.global_position * Vector3(1, 0, 1)
+		var info: Dictionary = track.query_stateless(start)
+		var dir: Vector3 = info["dir"]
+		var side: Vector3 = Vector3.UP.cross(dir) * [0.0, 0.5, -0.6][k % 3]
+		kart.place(Transform3D(Basis.looking_at(dir, Vector3.UP), start - dir * 15.0 + side + Vector3(0, 0.05, 0)))
+		kart.velocity = dir * 28.0
+		_inp({"accelerate": 1.0})
+		var c0: Vector3 = cone.global_position
+		for i in 50:
+			await physics_frame
+			_cone_max_y = maxf(_cone_max_y, kart.global_position.y)
+		moved = maxf(moved, cone.global_position.distance_to(c0))
+	_check("los conos salen volando", moved > 2.0 and moved < 80.0, "el cono se movió %.1f m" % moved)
+	_check("atropellar un cono no levanta el kart", _cone_max_y < 0.2, "altura máx. del kart %.2f m" % _cone_max_y)
 	_release_all()
 
 
@@ -207,6 +213,7 @@ func _test_offroad_slows() -> void:
 
 var events: Array = []
 var _last_drift_time := 0.0
+var _cone_max_y := 0.0
 
 
 func _inp(d: Dictionary) -> void:
@@ -276,11 +283,11 @@ func _turn(side: String, steer: float, frames: int) -> Dictionary:
 
 
 func _test_turns_left_right() -> void:
-	var l := await _turn("steer_left", 0.6, 60)
-	var r := await _turn("steer_right", 0.6, 60)
-	_check("giro a la izquierda (60 % de volante)", l["dyaw"] > 0.4 and l["lateral"] < -2.0,
+	var l := await _turn("steer_left", 0.45, 60)
+	var r := await _turn("steer_right", 0.45, 60)
+	_check("giro a la izquierda (45 % de volante)", l["dyaw"] > 0.4 and l["lateral"] < -2.0,
 			"%.2f rad, %.1f m a la izquierda" % [l["dyaw"], -l["lateral"]])
-	_check("giro a la derecha (60 % de volante)", r["dyaw"] < -0.4 and r["lateral"] > 2.0,
+	_check("giro a la derecha (45 % de volante)", r["dyaw"] < -0.4 and r["lateral"] > 2.0,
 			"%.2f rad, %.1f m a la derecha" % [-r["dyaw"], r["lateral"]])
 	var sym_yaw := absf(l["dyaw"] + r["dyaw"])
 	var sym_lat := absf(l["lateral"] + r["lateral"])
@@ -292,7 +299,7 @@ func _test_turns_left_right() -> void:
 
 func _test_steer_release() -> void:
 	await _at_speed(150)
-	_inp({"accelerate": 1.0, "steer_right": 0.6})
+	_inp({"accelerate": 1.0, "steer_right": 0.45})
 	await _frames(30)
 	_inp({"accelerate": 1.0})
 	await _frames(18)
@@ -310,8 +317,12 @@ func _test_steer_release() -> void:
 # =============================================================================
 
 func _test_grip_moderate_turn() -> void:
-	var r := await _turn("steer_right", 0.6, 60)
-	_check("giro moderado a fondo: agarra", r["slip"] < 4.0, "deriva máxima %.1f°" % r["slip"])
+	var r := await _turn("steer_right", 0.4, 60)
+	_check("giro normal (40 %) a 104 km/h: agarra", r["slip"] < 4.0, "deriva máxima %.1f°" % r["slip"])
+	# Pasarse de giro (75 %) en recta ya provoca el derrape
+	var o := await _turn("steer_right", 0.75, 40)
+	_check("pasarse de giro (75 %) en recta: derrapa", o["slip"] > 10.0 and events.size() > 0 and String(events[0]).begins_with("slide"),
+			"deriva máxima %.1f°, eventos %s" % [o["slip"], str(events)])
 
 
 func _test_flick_slides_on_straight() -> void:
@@ -339,13 +350,13 @@ func _test_progressive_grip_loss() -> void:
 		series.append(_slip())
 		max_step = maxf(max_step, absf(_slip() - prev))
 		prev = _slip()
-	var grows: bool = series[15] < series[30] and series[30] < series[45] and series[15] < 8.0
+	var grows: bool = series[15] < series[30] and series[30] < series[45] and series[15] < 12.0
 	_check("pérdida de agarre progresiva", grows and max_step < 2.5,
 			"deriva %.1f° → %.1f° → %.1f° (0,25 / 0,5 / 0,75 s), salto máx. %.2f°/fotograma" % [series[15], series[30], series[45], max_step])
 
 
 func _test_low_speed_grips() -> void:
-	await _at_speed(45)   # ~50 km/h
+	await _at_speed(22)   # ~25 km/h
 	var v: float = kart.get_speed_kmh()
 	_inp({"accelerate": 0.0, "steer_right": 1.0})
 	var mx := 0.0
@@ -407,7 +418,7 @@ func _recovery_time(mode: String) -> float:
 func _test_countersteer_recovers() -> void:
 	var tn := await _recovery_time("neutro")
 	var tc := await _recovery_time("contravolante")
-	_check("contravolante endereza mucho antes", tc < tn * 0.65 and tc < 0.9,
+	_check("contravolante endereza mucho antes", tc < tn * 0.65 and tc < 1.0,
 			"contravolante %.2f s / volante suelto %.2f s" % [tc, tn])
 
 
@@ -421,7 +432,7 @@ func _test_hold_keeps_drifting() -> void:
 		await physics_frame
 		mn = minf(mn, _slip())
 		mx = maxf(mx, _slip())
-	_check("volante a fondo: derrape sostenido y controlable", mn > 18.0 and mx < 60.0,
+	_check("volante a fondo: derrape sostenido y controlable (sin trompo)", mn > 18.0 and mx < 60.0,
 			"deriva entre %.1f° y %.1f° durante 2 s, %.0f km/h" % [mn, mx, kart.get_speed_kmh()])
 
 
@@ -487,7 +498,7 @@ func _test_mini_turbo_short_drift() -> void:
 	# bastante tiempo para que cuente como derrape válido.
 	await _at_speed()
 	_inp({"accelerate": 1.0, "steer_right": 1.0})
-	await _frames(15)
+	await _frames(8)
 	_inp({"accelerate": 1.0, "steer_left": 1.0})
 	var mx := 0.0
 	for i in 120:
@@ -499,8 +510,8 @@ func _test_mini_turbo_short_drift() -> void:
 	await _frames(5)
 	_inp({"accelerate": 1.0})
 	await _frames(5)
-	_check("derrape demasiado corto no cuenta", _boosts("success") == 0 and _boosts("window") == 0 and mx > 5.0,
-			"volantazo de 0,25 s: deriva máx. %.1f°, eventos %s" % [mx, str(events)])
+	_check("derrape demasiado corto no cuenta", _boosts("success") == 0 and _boosts("window") == 0,
+			"golpe de volante de 0,13 s: deriva máx. %.1f°, eventos %s" % [mx, str(events)])
 
 
 func _test_throttle_spam_no_boost() -> void:

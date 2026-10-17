@@ -46,8 +46,9 @@ Si alguna vez da un error de "firma distinta", desinstala la versión anterior y
 | | TURBO | Turbo cuando la barra pone "¡LISTO!" |
 | Arriba | II | Pausa |
 
-**Derrapar (sin botón):** a buena velocidad, mantén **◀** o **▶** a fondo: las ruedas pierden
-agarre y el kart se cruza. Para enderezar, pulsa el lado contrario (contravolante). Cuando
+**Derrapar (sin botón):** el centro de **◀** / **▶** es un giro normal. Lleva el pulgar al
+**borde exterior** del botón (giro fuerte) o dale un toque brusco: las ruedas pierden agarre
+y el kart se cruza. Para enderezar, pulsa el lado contrario (contravolante). Cuando
 quede recto y aparezca **"¡SUELTA Y PISA!"**, levanta el dedo de **ACEL** y vuelve a pulsarlo
 enseguida: **mini-turbo**. Guía completa en [`DERRAPE.md`](DERRAPE.md).
 

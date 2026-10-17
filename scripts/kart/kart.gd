@@ -62,32 +62,32 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var yaw_response_slide := 4.5  ## ... mientras desliza (la carrocería tiene inercia)
 
 @export_group("Adherencia")
-@export var grip_peak := 27.0          ## aceleración lateral máxima con agarre (m/s²)
-@export var grip_slide := 13.0         ## agarre dinámico al deslizar (m/s²): inercia lateral
+@export var grip_peak := 15.0          ## aceleración lateral máxima con agarre (m/s²)
+@export var grip_slide := 11.5         ## agarre dinámico al deslizar (m/s²): inercia lateral
 @export var slip_peak_deg := 4.0       ## deriva hasta la que el agarre es máximo
 @export var slip_full_deg := 14.0      ## deriva a partir de la que el agarre es el dinámico
-@export var slide_min_speed := 11.0    ## por debajo de esta velocidad (m/s) no se pierde adherencia
+@export var slide_min_speed := 8.0    ## por debajo de esta velocidad (m/s) no se pierde adherencia
 @export var slide_steer := 0.45        ## autoridad del volante mientras desliza (contravolante incluido)
 @export var oversteer := 2.5           ## tendencia a cruzarse mientras desliza (rad/s²)
 @export var drift_angle_target := 30.0 ## deriva de equilibrio con el volante a fondo (°): por encima, se frena el cruce
 @export var flick_grip_loss := 0.75    ## agarre perdido como máximo por un volantazo (transferencia de peso)
-@export var flick_sensitivity := 0.12 ## cuánto agarre quita cada rad/s² de aceleración de giro
+@export var flick_sensitivity := 0.18 ## cuánto agarre quita cada rad/s² de aceleración de giro
 @export var brake_grip_loss := 0.35    ## agarre perdido frenando a fondo (0-1): frenar girando cruza el kart
 @export var slide_drag := 2.5          ## m/s² de velocidad perdida a deriva completa
 @export var offroad_grip := 0.7        ## multiplicador de agarre en tierra
 @export var air_grip := 0.1            ## multiplicador de agarre en el aire
 
 @export_group("Mini-turbo por derrape")
-@export var drift_enter_deg := 9.0    ## deriva que cuenta como derrape
+@export var drift_enter_deg := 7.0    ## deriva que cuenta como derrape
 @export var drift_recover_deg := 5.0   ## deriva por debajo de la cual el kart está enderezado
 @export var drift_recover_hold := 0.08 ## s que hay que mantenerlo enderezado
 @export var drift_spin_deg := 85.0     ## deriva que se considera trompo (derrape inválido)
-@export var drift_min_time := 0.5     ## s mínimos de derrape para que sea válido
-@export var drift_level_times: Array[float] = [0.5, 1.0, 1.6]  ## s de derrape por nivel
+@export var drift_min_time := 0.3     ## s mínimos de derrape para que sea válido
+@export var drift_level_times: Array[float] = [0.3, 0.8, 1.4]  ## s de derrape por nivel
 @export var mini_turbo_time: Array[float] = [0.55, 0.85, 1.2]   ## s de impulso por nivel
 @export var mini_turbo_speed_mult := 1.18  ## punta durante el mini-turbo (× max_speed)
-@export var boost_window := 0.45       ## s tras enderezar para soltar y volver a pisar
-@export var release_grace := 0.2       ## s antes de enderezar en los que ya cuenta haber soltado
+@export var boost_window := 0.55       ## s tras enderezar para soltar y volver a pisar
+@export var release_grace := 0.25       ## s antes de enderezar en los que ya cuenta haber soltado
 @export var lift_min := 0.04           ## s mínimos con el acelerador suelto
 
 @export_group("Turbo")
@@ -160,6 +160,9 @@ var _flick := 0.0
 
 
 func _ready() -> void:
+	# Capa 2 = karts. Choca con el escenario (capa 1) pero no con los conos (capa 3).
+	collision_layer = 2
+	collision_mask = 1
 	floor_snap_length = 0.35
 	floor_max_angle = deg_to_rad(40)
 	wall_min_slide_angle = deg_to_rad(5)
@@ -348,6 +351,7 @@ func _physics_process(delta: float) -> void:
 	var pre_move := velocity
 	move_and_slide()
 	_handle_collisions(pre_move)
+	_knock_cones(pre_move)
 
 	var on_floor_now := is_on_floor()
 	if on_floor_now and not _was_on_floor:
@@ -479,6 +483,34 @@ func _reset_drift() -> void:
 	if drift_level != 0:
 		drift_level = 0
 		drift_level_changed.emit(0)
+
+
+# --- Conos (sin colisión física con el kart) ---------------------------------------
+
+@export_group("Conos")
+@export var cone_hit_radius := 1.2     ## distancia (m) a la que el kart golpea un cono
+@export var cone_slowdown := 0.97      ## velocidad que se conserva al atropellar un cono
+
+func _knock_cones(pre_move: Vector3) -> void:
+	var planar := Vector3(pre_move.x, 0, pre_move.z)
+	if planar.length() < 1.0:
+		return
+	var here := global_position
+	for c in get_tree().get_nodes_in_group("knockable"):
+		var rb := c as RigidBody3D
+		if rb == null:
+			continue
+		var d := rb.global_position - here
+		d.y = 0.0
+		if d.length() > cone_hit_radius or rb.linear_velocity.length() > 3.0:
+			continue
+		rb.sleeping = false
+		var away := d.normalized() if d.length() > 0.05 else planar.normalized()
+		rb.apply_central_impulse((planar * 0.8 + away * 3.0) * rb.mass + Vector3.UP * rb.mass * 3.5)
+		rb.apply_torque_impulse(Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * rb.mass)
+		velocity.x *= cone_slowdown
+		velocity.z *= cone_slowdown
+		model.bump(0.15)
 
 
 # --- Choques ---------------------------------------------------------------------

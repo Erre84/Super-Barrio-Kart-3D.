@@ -492,6 +492,11 @@ func _spawn_cone(parent: Node, pos: Vector3, mesh: Mesh) -> void:
 	rb.position = pos + Vector3(0, 0.02, 0)
 	rb.add_to_group("knockable")
 	rb.set_meta("start", rb.position)
+	# Capa propia (3): el kart NO choca físicamente con los conos (si no, se sube
+	# encima como a una rampa y sale volando). El kart los detecta por cercanía y
+	# los lanza él. Los conos sí chocan con el suelo, los muros y entre sí.
+	rb.collision_layer = 4
+	rb.collision_mask = 1 | 4
 	var cs := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
 	shape.radius = 0.22

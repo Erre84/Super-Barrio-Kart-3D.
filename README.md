@@ -4,6 +4,9 @@ Arcade de karts **poligonal** para **PC y Android**, hecho con **Godot 4** y **G
 Proyecto independiente que sucede a *Super Barrio Kart v16* (2D): mismo concepto, ambiente
 urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
+> **Versión 0.4.0:** derrape más accesible (gira de golpe o pásate de giro, también en recta)
+> y arreglado el fallo que lanzaba el kart por los aires al atropellar un cono.
+>
 > **Versión 0.3.0: derrape natural.** Sin botón de derrape: el kart derrapa al perder
 > adherencia y el mini-turbo se gana enderezando y soltando y pisando el acelerador
 > ([`docs/DERRAPE.md`](docs/DERRAPE.md)).
@@ -80,8 +83,9 @@ teclado español, francés, etc.
 
 - **Girar** solo hace lo que tú indicas. A más velocidad el giro es algo menos brusco, pero
   nunca hay corrección automática.
-- **Derrape natural (sin botón):** a más de ~60 km/h, un **volantazo a fondo** hace que las
-  ruedas pierdan agarre y el kart se cruce, también en recta. Mantén el volante para
+- **Derrape natural (sin botón):** con un giro normal el kart agarra; si **giras de golpe** o
+  **un poco más de la cuenta** (a partir de ~50 km/h, también en recta), las ruedas pierden
+  agarre y el kart se cruza. Mantén el volante para
   sostenerlo (azul → naranja → morado) y **contravolantea** para enderezar.
 - **Mini-turbo:** al quedar recto suena una campanita y aparece **"¡SUELTA Y PISA!"**:
   suelta el acelerador y vuelve a pisarlo en menos de medio segundo. Se puede encadenar.

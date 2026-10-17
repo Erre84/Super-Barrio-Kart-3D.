@@ -19,6 +19,24 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
+## Resultados de la v0.4: derrape accesible y conos (Godot 4.5 estable, Linux)
+
+Tras probar la APK 0.3, el derrape resultaba demasiado exigente (un solo derrape en una
+vuelta). Cambios y medidas:
+
+- **Mapa de facilidad** (`tests/drift_ease_map.gd`, 20 combinaciones de velocidad y volante):
+  ventanas de mini-turbo en **11 de 20**, frente a **1 de 20** en la v0.3. Con un 40 % de
+  volante el kart sigue agarrando a cualquier velocidad, y eses suaves (50 %) a 80 km/h
+  no derrapan (4,7° de deriva máx.).
+- **Conos.** Antes el kart podía subirse a un cono como a una rampa y salir lanzado:
+  **hasta 246 m** de altura medidos en la v0.3. Ahora el kart no choca físicamente con los
+  conos (capas de colisión separadas): los detecta por cercanía y los lanza. Nueva prueba:
+  se atropellan 6 conos de frente y de refilón a 100 km/h y el kart no sube nada (0,00 m).
+- **Vuelta automática:** el piloto automático consigue un mini-turbo de nivel 3 **en una
+  curva sin maniobra programada**. Entra pasado de velocidad, se cruza, contravolantea y,
+  al soltar y pisar para controlar la velocidad, le sale el impulso.
+- 31/31 pruebas de física OK.
+
 ## Resultados de la v0.3: derrape natural (Godot 4.5 estable, Linux)
 
 30 pruebas de física con entrada inyectada fotograma a fotograma (`kart.input_override`),

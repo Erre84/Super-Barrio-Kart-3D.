@@ -81,7 +81,7 @@ func _input(event: InputEvent) -> void:
 ## Dirección analógica en táctil: en el borde exterior del botón se gira a fondo y
 ## hacia el interior (hacia el otro botón) se gira menos. Permite trazar curvas con
 ## agarre sin derrapar, y derrapar a propósito llevando el pulgar hacia fuera.
-const STEER_MIN := 0.4
+const STEER_MIN := 0.3
 
 func _update_steer_strength(finger: int, pos: Vector2) -> void:
 	var id: String = _touch_to_button.get(finger, "")
@@ -93,7 +93,8 @@ func _update_steer_strength(finger: int, pos: Vector2) -> void:
 		var c := _btn_center(b)
 		var r := _btn_radius(b)
 		var outward := (c.x - pos.x) / r if id == "left" else (pos.x - c.x) / r
-		var strength := clampf(lerpf(STEER_MIN, 1.0, (outward + 0.6) / 1.2), STEER_MIN, 1.0)
+		var t := clampf((outward + 0.6) / 1.2, 0.0, 1.0)
+		var strength := lerpf(STEER_MIN, 1.0, pow(t, 1.5))   # centro ≈ 55 %: giro normal; borde exterior = 100 %: derrape
 		_strength[id] = strength
 		Input.action_press(b["action"], strength)
 		queue_redraw()

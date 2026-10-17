@@ -10,33 +10,38 @@ lateral que pide el giro**, esté donde esté: en una curva, en plena recta o al
 
 ![Marcas de goma de un derrape en recta](img/v0.3/marcas_goma.jpg)
 
-## Cómo se hace
+## Cómo se hace (v0.4: más accesible)
 
-1. **Pierde el agarre.** A partir de unos 60 km/h, un **volantazo a fondo** hace que las
-   ruedas pierdan adherencia poco a poco: el morro gira, pero el kart sigue yendo hacia
-   donde iba y empieza a deslizar de lado. Con giros moderados el kart agarra. A baja
-   velocidad, aunque gires a fondo, también agarra.
-   - Trucos: **frenar mientras giras** quita agarre atrás y el kart se cruza antes. Un
-     **golpe de volante a un lado y luego al otro** (cambio brusco) también lo provoca.
-2. **Mantén el derrape.** Con el volante a fondo el kart se sostiene cruzado unos 30°,
-   chirriando, echando humo y dejando marcas. La barra de derrape se llena:
-   **azul** (0,5 s) → **naranja** (1,0 s) → **morado** (1,6 s).
-3. **Contravolantea para enderezar.** Gira hacia el otro lado: el morro vuelve hacia la
-   trayectoria y el agarre regresa. Con contravolante se endereza en ~0,8 s. Soltando el
-   volante cuesta el doble, unos 1,5 s, porque el kart conserva inercia lateral.
-4. **¡Suelta y pisa!** Al quedar recto suena una campanita, aparece **"¡SUELTA Y PISA!"**
-   y un anillo amarillo bajo el kart. Tienes **0,45 s** para **soltar el acelerador y volver
-   a pisarlo**. Si lo haces: **¡MINI-TURBO!** (onda expansiva y explosión de sonido). Cuanto
-   más largo fue el derrape, más dura el impulso: 0,55 / 0,85 / 1,2 s.
-   - Puedes soltar un pelín antes de quedar recto (hasta 0,2 s) y también vale.
+El derrape **lo provocas tú**: con un giro normal el kart agarra y traza preciso; si
+**giras de golpe** o **un poco más de lo que pide la curva** (también en plena recta), las
+ruedas pierden agarre y el kart se cruza.
 
-**Encadenar.** Después de un mini-turbo puedes empezar otro derrape enseguida, también en
-recta: volantazo a la derecha → contravolante → suelta y pisa → volantazo a la izquierda…
+**Cuándo derrapa** (medido con `tests/drift_ease_map.gd`: medio segundo de giro y luego
+contravolante). · = agarra, D = derrapa, **T = derrapa y da opción a mini-turbo**:
 
-**El derrape en recta ocupa sitio.** Un derrape válido a 100 km/h (volantazo de ~0,45 s +
-contravolante) recorre unos 35 m, desplaza el kart **unos 8 m** de lado y cambia el rumbo
-unos 25°. En la calle (24 m entre muros) cabe si empiezas desde un lado y encadenas el
-siguiente hacia el otro: un zigzag.
+| Velocidad | 40 % volante | 55 % | 70 % | 85 % | 100 % |
+|---|---|---|---|---|---|
+| 50 km/h | · | · | · | D | **T** |
+| 65 km/h | · | · | D | **T** | **T** |
+| 80 km/h | · | · | **T** | **T** | **T** |
+| 104 km/h | · | D | **T** | **T** | **T** |
+
+En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T".
+
+1. **Provoca el derrape.** Gira más de la cuenta o da un volantazo. En móvil: lleva el pulgar
+   al **borde exterior** del botón ◀ o ▶. El centro del botón es un giro normal (~55 %) y el
+   borde interior, un giro suave. Frenar mientras giras también lo cruza.
+2. **Aguántalo un momento.** Basta con **0,3 s** para que cuente. La barra de derrape se
+   llena: **azul** (0,3 s) → **naranja** (0,8 s) → **morado** (1,4 s).
+3. **Contravolantea para enderezar.** Gira hacia el otro lado: se endereza en ~0,85 s.
+   Soltando el volante también se recupera, pero tarda unos 2 s.
+4. **¡Suelta y pisa!** Al quedar recto suena una campanita y aparece **"¡SUELTA Y PISA!"**.
+   Tienes **0,55 s** para soltar el acelerador y volver a pisarlo (también vale si ya lo
+   habías soltado hasta 0,25 s antes de enderezar). Resultado: **¡MINI-TURBO!**, más largo
+   cuanto más duró el derrape (0,55 / 0,85 / 1,2 s).
+
+**Encadenar.** Después de un mini-turbo puedes provocar otro enseguida, también en recta:
+volantazo a un lado → contravolante → suelta y pisa → volantazo al otro…
 
 ### Qué NO funciona (a propósito)
 
@@ -44,7 +49,7 @@ siguiente hacia el otro: un zigzag.
 |---|---|
 | Machacar el acelerador sin derrapar | Nada: sin derrape válido no hay ventana |
 | Machacar el acelerador durante la ventana | Un solo mini-turbo: cada derrape da **un** intento |
-| Volantazo muy corto (~0,25 s) | No llega a ser derrape válido: no abre ventana |
+| Golpe de volante muy corto (~0,13 s) | No llega a ser derrape válido: no abre ventana |
 | No soltar el acelerador al enderezar | "Suelta el acelerador y vuelve a pisar" |
 | Pisar cuando ya pasó la ventana | Sin impulso |
 | Cruzarse más de 85° (trompo) | Derrape anulado |
@@ -92,17 +97,18 @@ Todo está en el inspector del nodo `Kart` (`scripts/kart/kart.gd`):
 **Garantías.** No hay ningún código que gire, enderece o frene el kart por el jugador, ni
 derrapes preprogramados: todo sale de esas fuerzas. Las pruebas automáticas lo comprueban.
 
-## Valores medidos (pruebas automáticas)
+## Valores medidos (pruebas automáticas, v0.4)
 
 | Situación | Resultado |
 |---|---|
-| Giro al 60 % a 104 km/h | agarra (0,6° de deriva) |
-| Volantazo a fondo en recta a 104 km/h | derrapa desde 0,35 s, hasta 28° y 14 m/s laterales |
-| Pérdida de agarre | progresiva: 6° → 18° → 28° en 0,25 / 0,5 / 0,75 s (máx. 0,9° por fotograma) |
-| Volante a fondo a 44 km/h | no derrapa |
-| Volante a fondo sostenido | derrape estable entre 33° y 37° durante 2 s, a 93 km/h |
-| Enderezar con contravolante / soltando el volante | 0,77 s / 1,52 s |
+| Giro normal (40 %) a 104 km/h | agarra (1,6° de deriva) |
+| Pasarse de giro (75 %) en recta | derrapa (22°) |
+| Volantazo a fondo en recta a 104 km/h | derrapa desde 0,23 s, hasta 31° y 15 m/s laterales |
+| Pérdida de agarre | progresiva: 9° → 22° → 31° en 0,25 / 0,5 / 0,75 s (máx. 0,9° por fotograma) |
+| Volante a fondo a 22 km/h | no derrapa |
+| Volante a fondo sostenido | derrape estable entre 35° y 41° durante 2 s, sin trompo |
+| Enderezar con contravolante / soltando el volante | 0,85 s / 2,0 s |
 | Frenar a fondo derrapando | trompo (92°) y derrape anulado |
 | Izquierda frente a derecha | idéntico (diferencia 0,000°) |
-| Derrape válido en recta (volantazo 0,42 s) | 8 m de desplazamiento lateral, rumbo 25° |
-| Táctil: dedo en el borde interior / centro / exterior de ▶ | 40 % / ~70 % (agarra) / 100 % (derrapa) |
+| Machacar el acelerador 3 s sin derrapar | 0 mini-turbos |
+| Encadenar en recta (der → izq → der) | 3 mini-turbos seguidos |
