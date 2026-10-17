@@ -38,9 +38,9 @@ jobs:
 
       - name: Configurar SDK de Android y clave de depuración
         run: |
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
-            -keystore "$HOME/debug.keystore" -storepass android \
-            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          # Clave de DEPURACIÓN fija del repositorio (contraseña pública "android"):
+          # así cada APK nuevo se instala encima del anterior sin desinstalar.
+          cp tools/android/debug.keystore "$HOME/debug.keystore"
           mkdir -p ~/.config/godot
           for f in editor_settings-4.5.tres editor_settings-4.tres; do
             {

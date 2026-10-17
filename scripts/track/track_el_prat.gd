@@ -9,6 +9,7 @@ extends Node3D
 
 const MB := preload("res://scripts/core/mesh_builder.gd")
 const Props := preload("res://scripts/track/props.gd")
+const Landmarks := preload("res://scripts/track/landmarks.gd")
 
 ## Sentido de carrera: horario visto desde arriba. La recta de salida va hacia -Z.
 const CONTROL_POINTS := [
@@ -51,6 +52,7 @@ func build() -> void:
 	_build_start()
 	_build_boost_pads()
 	_build_obstacles()
+	_build_landmarks()
 	_build_city()
 	_build_skyline()
 
@@ -183,6 +185,11 @@ func respawn_transform(pos: Vector3) -> Transform3D:
 	var info := query_stateless(pos)
 	var i: int = info["index"]
 	var lat := clampf(info["lateral"], -ROAD_HALF + 2.0, ROAD_HALF - 2.0)
+	# Nunca reaparecer encima de una isleta o de las obras: usar el carril libre
+	var n := points.size()
+	for z in avoid_zones:
+		if posmod(i - int(z[0]), n) <= int(z[1]) - int(z[0]):
+			lat = float(z[2])
 	return Transform3D(Basis.looking_at(dirs[i], Vector3.UP), points[i] + lefts[i] * lat + Vector3(0, 0.4, 0))
 
 
@@ -516,6 +523,11 @@ func _find_index(p: Vector2) -> int:
 # =============================================================================
 
 func _clear_of_track(c: Vector3, radius: float, margin: float) -> bool:
+	# Río Llobregat (franja oeste) y recinto del aeropuerto (sur)
+	if absf(c.x - (-84.0)) < 13.0 + 11.0 + radius:
+		return false
+	if c.z + radius > FENCE_Z - 2.0:
+		return false
 	var lim := WALK_OUT + margin + radius
 	var lim2 := lim * lim
 	for i in range(0, points.size(), 2):
@@ -572,8 +584,8 @@ func _build_city() -> void:
 	# Marquesinas y vallas publicitarias
 	var ads := [
 		["BAR CAN PEP · ESMORZARS", Color("ffd23f")],
-		["CARXOFA DEL PRAT · D.O.", Color("7bb35a")],
-		["TALLER EL RAYO", Color("2b6fe0")],
+		["CARXOFA DEL PRAT", Color("7bb35a")],
+		["POLLASTRE POTA BLAVA", Color("3d7be0")],
 		["DELTA DEL LLOBREGAT", Color("3ec1d3")],
 		["SUPER BARRIO KART 3D", Color("e63946")],
 	]
@@ -658,6 +670,183 @@ func _build_city() -> void:
 		add_child(lbl)
 
 
+## Constantes del aeropuerto (al sur del barrio, como en la realidad).
+const RUNWAY_Z := 250.0
+const RUNWAY_X := 120.0
+const RUNWAY_LEN := 900.0
+const RUNWAY_W := 45.0
+const FENCE_Z := 168.0
+
+
+## Orientación para que la fachada (−Z local) mire hacia el punto más cercano del circuito.
+func _face_track(c: Vector3) -> Basis:
+	var i := _find_index(Vector2(c.x, c.z))
+	var to := points[i] - c
+	to.y = 0.0
+	return Basis.looking_at(to.normalized(), Vector3.UP)
+
+
+func _build_landmarks() -> void:
+	var n := points.size()
+	var mb := MB.new()
+	var glow := MB.new()
+	var labels: Array = []   # [posición, texto, color, yaw, tamaño, fijo_y]
+	mb.ao_strength = 0.25
+	mb.ao_height = 6.0
+
+	# --- Gallina Pota Blava junto a la primera curva (se ve al frenar) ---
+	var pb := Vector3(-26, 0, -206)
+	var b := _face_track(pb)
+	const PB_SCALE := 1.7
+	mb.push(Transform3D(b * Basis.from_scale(Vector3.ONE * PB_SCALE), pb))
+	Landmarks.pota_blava(mb)
+	mb.pop()
+	_occupied.append([pb, 7.0 * PB_SCALE])
+	labels.append([pb + b * Vector3(0, 1.6, -2.56) * PB_SCALE, "POTA BLAVA", Color("1d4fa8"), b.get_euler().y + PI, 96, false])
+
+	# --- La Telegrafia, al norte de la calle de las obras ---
+	var tg := Vector3(92, 0, -229)
+	b = _face_track(tg)
+	mb.push(Transform3D(b, tg))
+	glow.push(Transform3D(b, tg))
+	Landmarks.telegrafia(mb, glow)
+	glow.pop()
+	mb.pop()
+	_occupied.append([tg, 12.0])
+	labels.append([tg + b * Vector3(0, 0.95, -6.6), "LA TELEGRAFIA", Color("efe2c6"), b.get_euler().y + PI, 64, false])
+
+	# --- Plaça de la Vila: Casa de la Vila + parroquia (en el interior del trazado) ---
+	var cv := Vector3(44, 0, 66)
+	b = _face_track(cv)
+	mb.push(Transform3D(b, cv))
+	glow.push(Transform3D(b, cv))
+	Landmarks.casa_de_la_vila(mb, glow)
+	glow.pop()
+	mb.pop()
+	_occupied.append([cv, 14.0])
+	labels.append([cv + b * Vector3(0, 11.2, -6.35), "CASA DE LA VILA", Color("5a3b2a"), b.get_euler().y + PI, 72, false])
+	var ch := Vector3(40, 0, 22)
+	b = _face_track(ch)
+	mb.push(Transform3D(b, ch))
+	glow.push(Transform3D(b, ch))
+	Landmarks.church(mb, glow)
+	glow.pop()
+	mb.pop()
+	_occupied.append([ch, 14.0])
+	# Suelo de la plaza (despejada: sin bloques de relleno delante de los monumentos)
+	_occupied.append([Vector3(30, 0, 44), 30.0])
+	mb.use("default")
+	mb.cylinder(Vector3(46, -0.02, 44), 20.0, 0.06, 14, Color("d9c7a3"), Color("d9c7a3"))
+	for k in 6:
+		var a := TAU * k / 6.0
+		mb.push_at(Vector3(46, 0, 44) + Vector3(cos(a), 0, sin(a)) * 9.0, Vector3(0, -rad_to_deg(a) + 90, 0))
+		Props.bench(mb)
+		mb.pop()
+
+	# --- Mercat municipal, en la acera exterior de la Avinguda ---
+	var me := Vector3(244, 0, 30)
+	b = _face_track(me)
+	mb.push(Transform3D(b, me))
+	glow.push(Transform3D(b, me))
+	Landmarks.mercat(mb, glow)
+	glow.pop()
+	mb.pop()
+	_occupied.append([me, 17.0])
+	labels.append([me + b * Vector3(0, 10.6, -9.25), "MERCAT", Color("c26a3d"), b.get_euler().y + PI, 96, false])
+
+	# --- Parc del Riu: río Llobregat, chimenea de Torras Hostench y mirador ---
+	mb.push_at(Vector3(-84, 0, -30))
+	Landmarks.river(mb, _rng, 560.0, 26.0)
+	mb.pop()
+	_occupied.append([Vector3(-84, 0, -30), 0.0])  # el río se protege con _river_x
+	var chim := Vector3(-44, 0, -60)
+	mb.push_at(chim)
+	Landmarks.factory_chimney(mb)
+	mb.pop()
+	_occupied.append([chim, 5.0])
+	var look := Vector3(-48, 0, 34)
+	mb.push_at(look, Vector3(0, 30, 0))
+	Landmarks.lookout(mb)
+	mb.pop()
+	_occupied.append([look, 6.0])
+	labels.append([chim + Vector3(0, 6.5, 0), "PARC DEL RIU", Color("2f6b3a"), 0.0, 72, true])
+
+	# --- Aeropuerto: valla, pista, hangar, avión estacionado, manga y torre ---
+	mb.push_at(Vector3(RUNWAY_X, 0, FENCE_Z))
+	Landmarks.airport_fence(mb, 700.0)
+	mb.pop()
+	mb.push_at(Vector3(RUNWAY_X, 0, RUNWAY_Z))
+	glow.push_at(Vector3(RUNWAY_X, 0, RUNWAY_Z))
+	Landmarks.runway(mb, glow, RUNWAY_LEN, RUNWAY_W)
+	glow.pop()
+	mb.pop()
+	var hg := Vector3(190, 0, 198)
+	mb.push_at(hg, Vector3(0, 180, 0))
+	glow.push_at(hg, Vector3(0, 180, 0))
+	Landmarks.hangar(mb, glow)
+	glow.pop()
+	mb.pop()
+	mb.push_at(Vector3(110, 3.4, 200), Vector3(0, 155, 0))
+	Props.airliner(mb)
+	mb.pop()
+	mb.push_at(Vector3(30, 0, 188))
+	Landmarks.windsock(mb)
+	mb.pop()
+	var tw := Vector3(-30, 0, 206)
+	mb.push_at(tw)
+	glow.push_at(tw)
+	Landmarks.control_tower(mb, glow)
+	glow.pop()
+	mb.pop()
+	labels.append([Vector3(RUNWAY_X - 100, 4.2, FENCE_Z - 0.4), "AEROPORT  ✈  ZONA RESTRINGIDA", Color("1f4fa0"), PI, 64, false])
+
+	# --- Pórtico de señales tras la salida (como en las carreteras catalanas) ---
+	var gi := 22
+	var gb := Basis.looking_at(-dirs[gi], Vector3.UP)   # el panel mira a los karts que llegan
+	mb.push(Transform3D(gb, points[gi]))
+	var panel: Vector3 = Landmarks.sign_gantry(mb, (WALL_TOP + 0.8) * 2.0)
+	mb.pop()
+	var gpos := points[gi] + gb * panel
+	var gyaw := gb.get_euler().y
+	labels.append([gpos + Vector3(0, 0.45, 0) + gb.z * -0.02, "✈ Aeroport   ↑ Barcelona", Color.WHITE, gyaw + PI, 72, false])
+	labels.append([gpos + Vector3(0, -0.45, 0) + gb.z * -0.02, "C-31   Castelldefels →", Color.WHITE, gyaw + PI, 64, false])
+
+	# --- Placas azules de calle sobre el muro, en puntos clave ---
+	for spec in [[Vector2(0, -60), "Av. del Remolar"], [Vector2(100, -194), "Carrer de la Telegrafia"],
+			[Vector2(206, 30), "Av. Verge de Montserrat"], [Vector2(80, 129), "Carrer Major"],
+			[Vector2(150, -88), "Passeig del Riu"]]:
+		var i := _find_index(spec[0])
+		var side := -1.0 if curv[i] >= 0.0 else 1.0
+		var p := edge(i, side * (WALL_TOP + 0.4), 2.2)
+		var pb2 := Basis.looking_at(lefts[i] * side, Vector3.UP)  # mira a la carretera
+		mb.push(Transform3D(pb2, p))
+		Landmarks.street_plaque(mb)
+		mb.use("metal")
+		mb.box(Vector3(0, -1.1, 0.05), Vector3(0.1, 2.2, 0.1), Color("6b737b"))
+		mb.pop()
+		labels.append([p + pb2 * Vector3(0, 0, -0.07), spec[1], Color.WHITE, pb2.get_euler().y + PI, 48, false])
+
+	_add_mesh(mb, "Landmarks")
+	var gl := _add_mesh(glow, "LandmarkLights", true)
+	gl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for l in labels:
+		var lbl := Label3D.new()
+		lbl.text = l[1]
+		lbl.font_size = l[4]
+		lbl.pixel_size = 0.012 if l[4] >= 64 else 0.008
+		lbl.outline_size = 0
+		lbl.modulate = l[2]
+		lbl.position = l[0]
+		if l[5]:
+			lbl.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+			lbl.outline_size = 14
+			lbl.outline_modulate = Color.WHITE
+		else:
+			lbl.rotation.y = l[3]
+			lbl.double_sided = false
+		add_child(lbl)
+
+
 func _place_apartment(mb, glow, c: Vector3, face: Vector3, w: float, dd: float, floors: int) -> void:
 	var t := Transform3D(Basis.looking_at(face, Vector3.UP), c)
 	mb.push(t)
@@ -677,15 +866,11 @@ func _build_skyline() -> void:
 		var a := TAU * k / 70.0 + _rng.randf_range(-0.03, 0.03)
 		var r := _rng.randf_range(250.0, 340.0)
 		var p := center + Vector3(cos(a) * r, 0, sin(a) * r)
+		if p.z > FENCE_Z - 20.0 or absf(p.x + 84.0) < 40.0:
+			continue  # ni sobre el aeropuerto ni sobre el río
 		mb.push_at(p, Vector3(0, rad_to_deg(-a), 0))
 		Props.far_block(mb, _rng, _rng.randf_range(18, 34), _rng.randf_range(14, 22), _rng.randf_range(14, 40))
 		mb.pop()
-	# Torre de control del aeropuerto, al suroeste
-	mb.push_at(Vector3(-210, 0, 330))
-	glow.push_at(Vector3(-210, 0, 330))
-	Props.control_tower(mb, glow)
-	glow.pop()
-	mb.pop()
 	# Colinas en el horizonte
 	for k in 14:
 		var a := PI * 1.05 + k * 0.11

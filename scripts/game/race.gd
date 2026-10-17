@@ -7,6 +7,7 @@ const TrackScene := preload("res://scenes/track_el_prat.tscn")
 const KartScene := preload("res://scenes/kart.tscn")
 const HudScene := preload("res://scenes/hud.tscn")
 const ChaseCamera := preload("res://scripts/kart/chase_camera.gd")
+const Lighting := preload("res://scripts/game/lighting.gd")
 const KartScript := preload("res://scripts/kart/kart.gd")
 const TrackScript := preload("res://scripts/track/track_el_prat.gd")
 const HudScript := preload("res://scripts/ui/hud.gd")
@@ -53,12 +54,14 @@ func _ready() -> void:
 	add_child(camera)
 	camera.make_current()
 
-	for spec in [[Vector3(520, 150, -520), Vector3(-420, 35, 420), 0.15],
-			[Vector3(600, 220, -300), Vector3(-500, 90, 520), 0.62]]:
+	# Aviones: uno aterrizando y otro despegando, alineados con la pista
+	for spec in [["landing", 0.2, 34.0], ["takeoff", 0.55, 40.0]]:
 		var plane := Airplane.new()
-		plane.from = spec[0]
-		plane.to = spec[1]
-		plane.phase = spec[2]
+		plane.mode = spec[0]
+		plane.phase = spec[1]
+		plane.duration = spec[2]
+		plane.runway_center = Vector3(track.RUNWAY_X, 0, track.RUNWAY_Z)
+		plane.runway_length = track.RUNWAY_LEN
 		add_child(plane)
 
 	hud = HudScene.instantiate()
@@ -80,40 +83,7 @@ func _ready() -> void:
 
 
 func _build_environment() -> void:
-	var env := Environment.new()
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color("2f7fdc")
-	sky_mat.sky_horizon_color = Color("bfe2f4")
-	sky_mat.ground_horizon_color = Color("bfe2f4")
-	sky_mat.ground_bottom_color = Color("8a9a7a")
-	sky_mat.sun_angle_max = 20.0
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-	env.background_mode = Environment.BG_SKY
-	env.sky = sky
-	# Luz ambiente de color fijo (más predecible que la del cielo en Compatibility)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("a9bfd6")
-	env.ambient_light_energy = 0.62
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.0
-	env.fog_enabled = true
-	env.fog_light_color = Color("cfe0ee")
-	env.fog_density = 0.0011
-	env.fog_sky_affect = 0.0
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-
-	var sun := DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-48, -38, 0)
-	sun.light_color = Color("fff0d6")
-	sun.light_energy = 1.25
-	sun.shadow_enabled = true
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance = 110.0
-	add_child(sun)
+	Lighting.build(self, OS.has_feature("mobile"))
 
 
 func _physics_process(delta: float) -> void:

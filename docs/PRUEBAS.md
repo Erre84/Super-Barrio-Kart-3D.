@@ -19,7 +19,51 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
-## Resultados de esta entrega (Godot 4.5 estable, Linux)
+## Resultados de la v0.2 (Godot 4.5 estable, Linux)
+
+| Prueba | Resultado |
+|---|---|
+| Importación y compilación de todos los scripts | ✅ sin errores |
+| 23 pruebas de física (`tests/physics_tests.gd`) | ✅ 23/23 |
+| Vuelta completa con el piloto automático | ✅ 29,7 s, 0 reapariciones, 4 roces |
+| Render real con Compatibility (OpenGL 3.3 por software) | ✅ capturas en `docs/img/v0.2/` |
+| APK de Android compilado en GitHub Actions | ✅ 27,9 MB, se descarga de la release `apk-prueba` |
+| Manifiesto del APK | ✅ minSdk 24 (Android 7.0), targetSdk 35, OpenGL ES 3.0, horizontal, arm64 |
+
+**Pruebas de dirección nuevas en la v0.2:**
+
+```
+OK  giro a la izquierda — 1.06 rad, 11.2 m a la izquierda
+OK  giro a la derecha — 1.06 rad, 11.2 m a la derecha
+OK  izquierda y derecha simétricas — diferencia 0.0000 rad / 0.000 m
+OK  sin freno automático en curva — conserva 100% / 100% de la velocidad con gas a fondo
+OK  al soltar, el volante vuelve en <0,15 s — giro residual 0.0000 rad/s
+OK  después sigue recto (sin autocorrección) — 0.00000 rad en 1 s
+OK  derrape progresivo: el ángulo crece — 0.06 → 0.25 → 0.48 rad (0,05 s / 0,17 s / 0,52 s)
+OK  derrape progresivo: el giro crece — 1.31 → 2.50 rad/s
+OK  derrape sin saltos bruscos — cambio máximo por fotograma 0.0267 rad (límite 0.0272)
+OK  contravolante abre la curva — giro cerrar 2.52 / neutro 1.55 / contravolante 0.58 rad/s
+OK  contravolante reduce el ángulo — deslizamiento 0.48 / 0.32 / 0.16 rad
+OK  con contravolante se mantiene el derrape
+```
+
+Se mantienen las 11 pruebas de la v0.1: sin autocorrección, marcha atrás, punta, turbo,
+mini-turbo morado, muros, choque detectado, conos y tierra.
+
+### Errores encontrados y corregidos en la v0.2
+
+- El piloto automático se quedaba atascado contra una isleta y la reaparición podía dejar
+  el kart encima de ella: ahora siempre se reaparece en el carril libre.
+- La luz de relleno se dibujaba en el cielo como un "segundo sol" oscuro.
+- El río quedaba enterrado bajo el suelo y los bloques lejanos se colocaban encima del aeropuerto.
+- Los rótulos de los monumentos estaban girados del revés y no se leían.
+- La suspensión podía volverse inestable si un fotograma tardaba mucho, como en un móvil
+  lento; ahora se integra en pasos pequeños.
+- Las llamas del turbo saturaban a blanco.
+- Cada compilación del APK usaba una clave distinta, lo que obligaba a desinstalar para
+  actualizar; ahora la clave de depuración es fija.
+
+## Resultados de la v0.1 (histórico)
 
 Comprobado en un entorno sin pantalla ni GPU, con Godot 4.5 oficial:
 
@@ -66,7 +110,7 @@ fuera de pista: 0 s   reapariciones: 0   marcha atrás: -9 m/s
 | ![Avinguda](img/avinguda.png) | ![Controles táctiles](img/controles_tactiles.png) |
 | ![Piloto chibi](img/piloto_cara.png) | ![Plaça de la Carxofa](img/plaza_carxofa.png) |
 
-### Errores encontrados y corregidos gracias a estas pruebas
+#### Errores encontrados y corregidos gracias a estas pruebas
 
 - Los colores de vértice salían con la gamma mal (todo casi blanco): ahora se escriben en
   espacio lineal.
@@ -89,9 +133,9 @@ Sé claro con esto antes de dar la versión por buena:
   (están todos en el inspector del nodo `Kart`).
 - **Mando físico.** El mapeo está definido (Xbox/PlayStation estándar vía SDL), pero no se
   ha conectado ningún mando real.
-- **Android.** No se ha exportado un APK ni se ha probado en un móvil: el entorno no tenía
-  SDK de Android. Los controles táctiles se han revisado visualmente y por código, pero no
-  con dedos reales.
+- **Android en un móvil real.** El APK se compila y su manifiesto es correcto, pero **no se
+  ha instalado en ningún teléfono**: no se ha comprobado que arranque, ni los FPS, ni el
+  tacto real de los botones.
 - **Rendimiento real.** El render se ha hecho por software (muy lento); no hay medidas de
   FPS en un PC con GPU ni en un móvil. Toda la ciudad son unas pocas mallas grandes; si un
   móvil modesto va justo, lo primero sería reducir sombras y edificios lejanos.
@@ -106,6 +150,10 @@ Sé claro con esto antes de dar la versión por buena:
 - [ ] `A`/`D` giran el kart y, al soltar, el kart sigue recto (no se endereza solo hacia la calle).
 - [ ] `S` frena y, parado, va marcha atrás.
 - [ ] `Espacio` + giro: saltito, derrape, chispas azul → naranja → morado; al soltar, turbo.
+- [ ] El derrape entra suave (no da un latigazo) y se asienta en unas décimas de segundo.
+- [ ] Durante el derrape, girar hacia fuera (contravolante) abre la curva **sin** salir del derrape.
+- [ ] Girar a la izquierda y a la derecha se siente igual.
+- [ ] Al soltar la dirección el kart sigue recto y no busca la carretera por su cuenta.
 - [ ] Humo de neumáticos al derrapar y al frenar fuerte.
 - [ ] `E` con la barra llena: ¡TURBO! y llamas por los escapes.
 - [ ] `Q` mantiene la vista hacia atrás.
@@ -118,7 +166,9 @@ Sé claro con esto antes de dar la versión por buena:
 - [ ] Stick izquierdo gira de forma progresiva (analógica).
 - [ ] Gatillos aceleran/frenan; `RB`/`LB` derrapan; `X` turbo; `Y` mirar atrás; `Start` pausa.
 
-**Android**
+**Android** (instalación: [`ANDROID.md`](ANDROID.md))
+- [ ] El APK se instala y el juego arranca.
+- [ ] Va fluido (si no, apunta el modelo del móvil).
 - [ ] El juego arranca en horizontal y a pantalla completa.
 - [ ] Los botones táctiles aparecen solos y se pueden pulsar varios a la vez
       (acelerar + girar + derrapar).

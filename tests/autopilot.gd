@@ -99,9 +99,10 @@ func _drive(kart, track) -> void:
 	# Esquiva las isletas/obras apuntando un poco hacia el lado libre
 	var lateral_goal := 0.0
 	for z in track.avoid_zones:
-		var ahead := posmod(i + look - int(z[0]), n)
-		if ahead <= int(z[1]) - int(z[0]):
-			lateral_goal = float(z[2])
+		# Esquivar mientras el kart o el punto que persigue estén dentro de la zona
+		for j in [i, i + look / 2, i + look]:
+			if posmod(j - int(z[0]), n) <= int(z[1]) - int(z[0]):
+				lateral_goal = float(z[2])
 	target += track.lefts[(i + look) % n] * lateral_goal
 	var to: Vector3 = target - kart.global_position
 	to.y = 0
@@ -147,6 +148,8 @@ func _drive(kart, track) -> void:
 	# Capturas
 	_shot("02_salida", _t > 5.0)
 	_shot("03_derrape", kart.drifting and kart.drift_level >= 1)
+	_shot_front("07_derrape_frente", kart.drifting and kart.drift_time > 0.45)
+	_shot_front("08_turbo_frente", kart.boost_time > 0.3 and float(info["progress"]) > 0.3)
 	_shot("04_avenida", float(info["progress"]) > 0.55)
 	# Mirar atrás: mantener el botón ~0,5 s, capturar y soltar
 	if float(info["progress"]) > 0.36 and _look_back_frames >= 0:
@@ -171,6 +174,35 @@ func _shot(shot_name: String, condition: bool) -> void:
 	print("[autopilot] captura ", shot_name)
 	if shot_name == "05_mirar_atras":
 		Input.action_release("look_back")
+	if shot_name == _quit_after:
+		get_tree().quit(0)
+
+
+## Captura con una cámara delante del kart, mirándolo (sin HUD).
+func _shot_front(shot_name: String, condition: bool) -> void:
+	if _shots_dir == "" or not condition or _shots_done.has(shot_name):
+		return
+	_shots_done[shot_name] = true
+	var kart = race.kart
+	var fwd: Vector3 = -kart.global_transform.basis.z
+	var right: Vector3 = kart.global_transform.basis.x
+	var cam := Camera3D.new()
+	cam.fov = 50.0
+	cam.far = 1500.0
+	race.add_child(cam)
+	cam.global_position = kart.global_position + fwd * 5.2 + right * 1.6 + Vector3.UP * 1.25
+	cam.look_at(kart.global_position + Vector3.UP * 0.75 + fwd * 0.4, Vector3.UP)
+	cam.make_current()
+	race.hud.visible = false
+	get_tree().paused = true
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png(_shots_dir.path_join(shot_name + ".png"))
+	print("[autopilot] captura ", shot_name)
+	get_tree().paused = false
+	race.hud.visible = true
+	race.camera.make_current()
+	cam.queue_free()
 	if shot_name == _quit_after:
 		get_tree().quit(0)
 

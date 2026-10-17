@@ -4,21 +4,27 @@ Arcade de karts **poligonal** para **PC y Android**, hecho con **Godot 4** y **G
 Proyecto independiente que sucede a *Super Barrio Kart v16* (2D): mismo concepto, ambiente
 urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
-> **Versión 0.1.0 — primera versión jugable.** Un circuito, un kart y un piloto.
-> Todavía no hay rivales, ni objetos/poderes, ni el resto de personajes.
+> **Versión 0.2.0.** Un circuito, un kart y un piloto, ya pulidos: conducción con derrape
+> progresivo y contravolante, modelos 3D rehechos, iluminación nueva y un El Prat con
+> lugares reconocibles. Todavía no hay rivales, ni objetos ni el resto de personajes.
+> Novedades en [`docs/MEJORAS_v0.2.md`](docs/MEJORAS_v0.2.md).
 
-![Carrera en El Prat](docs/img/carrera.png)
+![Derrape en El Prat](docs/img/v0.2/carrera_derrape_frente.jpg)
+
+**📱 Android:** descarga el APK de prueba en
+[Releases → apk-prueba](https://github.com/Erre84/Super-Barrio-Kart-3D./releases/tag/apk-prueba)
+y sigue [`docs/ANDROID.md`](docs/ANDROID.md).
 
 ## Qué incluye
 
 | | |
 |---|---|
-| **Kart low-poly** | Chasis, pontones, alerón, motor con escapes, volante y ruedas que giran y se orientan. Todo es geometría 3D facetada (sin sprites). |
-| **Piloto chibi** | Cabeza grande, ojos con iris y brillo, gorra hacia atrás, sudadera con capucha. Gira la cabeza hacia la curva. Colores configurables. |
-| **Circuito "El Prat"** | ~1 km: recta de meta, curva de 90°, calle con obras, chicane, avinguda con isletas de palmeras, una "ese" y vuelta a meta. Plaza de la Carxofa, bloques de pisos con persianas y toldos, palmeras, pinos piñoneros, farolas, marquesinas, vallas, torre de control y aviones aterrizando. |
-| **Conducción arcade** | Aceleración, frenada, marcha atrás, derrape con saltito, mini-turbos (azul → naranja → morado), turbo con barra recargable, pads aceleradores, salida perfecta. |
-| **Sin ayudas** | La dirección solo responde a tu entrada: nada gira el kart por ti ni frena antes de las curvas. |
-| **Efectos** | Humo de neumáticos, chispas de derrape por nivel, llamas de turbo, polvo fuera de pista, vibración de cámara al chocar. |
+| **Kart low-poly** | Carrocería esculpida con chaflanes, alerones, motor y escapes cromados, volante que gira y ruedas con llanta de 5 radios, flanco de color y pinza de freno. Materiales separados: pintura, goma, metal, cromo. |
+| **Piloto chibi** | Cabeza grande con ojos expresivos que parpadean, gorra hacia atrás, sudadera, bufanda que ondea y brazos que siguen al volante. Sonríe al derrapar y se gira al mirar atrás. |
+| **Circuito "El Prat"** | ~1 km con curva de 90°, calle en obras, chicane, avinguda con isletas y una "ese". Gallina Pota Blava, La Telegrafia, chimenea del Parc del Riu y río Llobregat, Casa de la Vila y parroquia, Mercat, Plaça de la Carxofa y aeropuerto con torre de control, pista y aviones aterrizando y despegando. |
+| **Conducción arcade** | Aceleración, frenada, marcha atrás, derrape progresivo con contravolante, mini-turbos (azul → naranja → morado), turbo, pads aceleradores, salida perfecta. |
+| **Sin ayudas** | La dirección solo responde a tu entrada: nada gira el kart por ti ni frena antes de las curvas (comprobado por pruebas automáticas). |
+| **Efectos** | Humo 3D, chispas por nivel con destello, llamas de turbo, polvo, sombra de contacto, suspensión que rebota y vibración de cámara al chocar. |
 | **Colisiones** | Muros New Jersey, isletas, barreras de obra y bolardos (fijos), conos que salen volando. Salirse al arcén de tierra frena. |
 | **Cámara** | Tercera persona detrás del kart, FOV dinámico, botón para **mirar atrás**. |
 | **Controles** | Teclado, mando y pantalla táctil multitáctil (Android). |
@@ -27,8 +33,8 @@ urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 
 | | |
 |---|---|
-| ![Kart y piloto](docs/img/kart_frente.png) | ![Vista aérea](docs/img/circuito_aereo.png) |
-| ![Mirar atrás](docs/img/mirar_atras.png) | ![Controles táctiles](docs/img/controles_tactiles.png) |
+| ![Kart de frente](docs/img/v0.2/kart_frente.jpg) | ![Kart desde detrás](docs/img/v0.2/kart_detras.jpg) |
+| ![Gallina Pota Blava](docs/img/v0.2/pota_blava.jpg) | ![Vista aérea](docs/img/v0.2/circuito_aereo.jpg) |
 
 ## Cómo ejecutarlo
 
@@ -69,8 +75,9 @@ teclado español, francés, etc.
 
 - **Girar** solo hace lo que tú indicas. A más velocidad el giro es algo menos brusco, pero
   nunca hay corrección automática.
-- **Derrape:** pulsa derrape y gira (o gira y pulsa). El kart da un saltito, se cruza y
-  desliza. Mientras derrapas, girar **hacia** la curva la cierra y girar **hacia fuera** la abre.
+- **Derrape:** pulsa derrape y gira (o gira y pulsa). El kart da un saltito y el derrape
+  se va asentando en unas décimas. Mientras derrapas, girar **hacia** la curva la cierra y
+  **contravolante** (hacia fuera) la abre sin perder el derrape.
   Cuanto más aguantes, más carga:
   azul (~1 s) → naranja (~2 s) → morado (~3 s). Suelta para el **mini-turbo**.
 - **Turbo:** la barra se recarga sola (≈9 s) y los mini-turbos la rellenan un poco.
@@ -92,22 +99,27 @@ materials/                 Materiales low-poly (color por vértice, luminoso, pa
 scripts/
   core/input_setup.gd      Mapa de controles (teclado + mando) registrado por código
   core/mesh_builder.gd     Generador de mallas low-poly facetadas
-  kart/kart.gd             Física arcade, derrape, turbos, colisiones, efectos
-  kart/kart_model.gd       Modelo 3D del kart y del piloto chibi
+  kart/kart.gd             Física arcade, derrape, turbos, colisiones
+  kart/kart_model.gd       Modelo 3D del kart y del piloto chibi + animaciones
+  kart/kart_effects.gd     Humo, chispas, llamas, polvo y sombra de contacto
   kart/chase_camera.gd     Cámara trasera y "mirar atrás"
   track/track_el_prat.gd   Trazado, asfalto, muros, obstáculos, ciudad
   track/props.gd           Edificios, palmeras, farolas, alcachofa, avión...
-  track/airplane.gd        Aviones aterrizando
+  track/landmarks.gd       Lugares de El Prat: Pota Blava, Telegrafia, aeropuerto...
+  track/airplane.gd        Aviones aterrizando y despegando
   ui/hud.gd                Velocímetro, vueltas, minimapa, pausa
   ui/touch_controls.gd     Botones táctiles multitáctiles
-  game/race.gd             Lógica de carrera y ambiente
+  game/race.gd             Lógica de carrera
+  game/lighting.gd         Iluminación, sombras, niebla y brillo
 tests/
   physics_tests.gd         Pruebas de física (dirección, derrape, muros, conos...)
   autopilot.gd             Piloto automático para pruebas (usa las acciones reales)
   showcase.gd              Capturas de presentación
 tools/run_tests.sh         Ejecuta todas las pruebas
 docs/PRUEBAS.md            Qué se ha probado, resultados y lista para probarlo tú
-.github/workflows/         Pruebas automáticas en GitHub Actions
+docs/MEJORAS_v0.2.md       Qué ha mejorado en la v0.2 y qué sigue pendiente
+docs/ANDROID.md            Cómo instalar el APK de prueba
+.github/workflows/         Pruebas automáticas y compilación del APK en GitHub Actions
 ```
 
 ### Por qué la geometría se genera por código
@@ -127,6 +139,8 @@ pueden sustituir por modelos `.glb` sin tocar la física.
 - **Colores del kart y del piloto:** diccionario `style` en `scripts/kart/kart_model.gd`.
 
 ## Exportar a Android
+
+El APK de prueba se compila solo en GitHub (ver arriba). Para hacerlo tú:
 
 1. En Godot: **Editor → Administrar plantillas de exportación** → descargar.
 2. Instala el SDK de Android y configura su ruta en **Editor → Configuración del editor →
