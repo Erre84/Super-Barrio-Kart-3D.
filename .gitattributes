@@ -1,0 +1,6 @@
+# Normaliza finales de línea (Godot usa LF)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ogg binary
+*.wav binary
