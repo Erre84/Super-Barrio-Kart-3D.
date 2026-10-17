@@ -81,7 +81,7 @@ func _input(event: InputEvent) -> void:
 ## Dirección analógica en táctil: en el borde exterior del botón se gira a fondo y
 ## hacia el interior (hacia el otro botón) se gira menos. Permite trazar curvas con
 ## agarre sin derrapar, y derrapar a propósito llevando el pulgar hacia fuera.
-const STEER_MIN := 0.45
+const STEER_MIN := 0.4
 
 func _update_steer_strength(finger: int, pos: Vector2) -> void:
 	var id: String = _touch_to_button.get(finger, "")

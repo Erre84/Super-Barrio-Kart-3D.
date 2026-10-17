@@ -91,9 +91,9 @@ func _run() -> void:
 	# Volantazo a la izquierda (hacia el centro de la calle)
 	kart.input_override = {"accelerate": 1.0, "steer_left": 1.0}
 	var shot_slide := false
-	for i in 70:
+	for i in 27:
 		await _frames(1)
-		if not shot_slide and kart.drift_time > 0.35:
+		if not shot_slide and kart.drift_time > 0.12:
 			shot_slide = true
 			await _snap("derrape_detras")
 			var k: Vector3 = kart.global_position
@@ -104,6 +104,13 @@ func _run() -> void:
 	kart.input_override = {"accelerate": 1.0, "steer_right": 1.0}
 	for i in 120:
 		await _frames(1)
+		if not shot_slide and kart.drift_state == 1 and rad_to_deg(absf(kart.slip_angle)) > 14.0:
+			shot_slide = true
+			await _snap("derrape_detras")
+			var k: Vector3 = kart.global_position
+			var v: Vector3 = Vector3(kart.velocity.x, 0, kart.velocity.z).normalized()
+			var side: Vector3 = Vector3.UP.cross(v)
+			await _snap("derrape_frente", [k + v * 6.5 + side * 2.2 + Vector3.UP * 1.3, k + Vector3.UP * 0.6, 50.0])
 		if rad_to_deg(absf(kart.slip_angle)) < 4.0:
 			kart.input_override = {"accelerate": 1.0}
 		if kart.drift_state == 2:

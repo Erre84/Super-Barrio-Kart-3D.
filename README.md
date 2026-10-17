@@ -8,6 +8,8 @@ urbano y circuito de **El Prat de Llobregat**, ahora en 3D real.
 > adherencia y el mini-turbo se gana enderezando y soltando y pisando el acelerador
 > ([`docs/DERRAPE.md`](docs/DERRAPE.md)).
 >
+> ![Suelta y pisa](docs/img/v0.3/suelta_y_pisa.jpg)
+>
 > **Versión 0.2.0.** Un circuito, un kart y un piloto, ya pulidos: conducción con derrape
 > progresivo y contravolante, modelos 3D rehechos, iluminación nueva y un El Prat con
 > lugares reconocibles. Todavía no hay rivales, ni objetos ni el resto de personajes.

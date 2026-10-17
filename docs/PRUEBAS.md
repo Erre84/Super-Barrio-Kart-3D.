@@ -30,19 +30,19 @@ OK  giro izquierda / derecha (60 %) — 0.75 rad / 0.75 rad, simétricos (0.0000
 OK  sin freno automático en curva — conserva 100% / 100%
 OK  al soltar, el giro se detiene en <0,3 s (inercia de la carrocería)
 OK  después sigue recto — 0.00007 rad en 1 s
-OK  giro moderado a fondo: agarra — deriva máxima 0.0°
-OK  volantazo en recta: pierde agarre y derrapa — 24.4°, derrape desde 0.53 s, 11.9 m/s laterales
-OK  pérdida de agarre progresiva — 3.0° → 10.8° → 23.1° (0,25 / 0,5 / 0,75 s), máx. 0.90°/fotograma
+OK  giro moderado a fondo: agarra — deriva máxima 0.6°
+OK  volantazo en recta: pierde agarre y derrapa — 28.5°, derrape desde 0.35 s, 13.7 m/s laterales
+OK  pérdida de agarre progresiva — 6.3° → 18.2° → 27.7° (0,25 / 0,5 / 0,75 s), máx. 0.92°/fotograma
 OK  a baja velocidad no derrapa — 44 km/h a fondo: 0.0°
-OK  derrape simétrico izquierda/derecha — 29.5° / 29.5°, diferencia 0.000°
-OK  conserva inercia lateral al soltar el volante — sigue deslizando 1.35 s
-OK  contravolante endereza mucho antes — 0.70 s frente a 1.35 s
-OK  volante a fondo: derrape sostenido y controlable — 29.8°–34.0° durante 2 s
-OK  frenar a fondo derrapando: trompo (88°) y derrape anulado, sin turbo
+OK  derrape simétrico izquierda/derecha — 32.3° / 32.3°, diferencia 0.000°
+OK  conserva inercia lateral al soltar el volante — sigue deslizando 1.52 s
+OK  contravolante endereza mucho antes — 0.77 s frente a 1.52 s
+OK  volante a fondo: derrape sostenido y controlable — 32.5°–37.3° durante 2 s
+OK  frenar a fondo derrapando: trompo (92°) y derrape anulado, sin turbo
 OK  enderezar + soltar y pisar = mini-turbo — 103 → 123 km/h
 OK  pisar fuera de la ventana no da impulso
 OK  sin soltar el acelerador no hay impulso
-OK  derrape demasiado corto no cuenta
+OK  volantazo de 0,25 s: derrape demasiado corto, no cuenta
 OK  machacar el acelerador 3 s sin derrapar — 0 mini-turbos
 OK  machacar el acelerador en la ventana — 1 solo mini-turbo
 OK  encadenar derrapes en recta (der → izq → der) — 3 mini-turbos, 123 km/h al final
@@ -51,8 +51,8 @@ OK  marcha atrás, punta 104 km/h, turbo 138 km/h, muros, choque, conos, tierra
 
 **Vuelta automática.** El piloto automático ya no tiene botón de derrape: controla la
 velocidad según la curva que viene y contravolantea si se cruza. En la recta de salida hace
-la maniobra completa (volantazo → contravolante → suelta y pisa) y consigue un mini-turbo.
-Vuelta en ~40 s, 0 reapariciones.
+la maniobra completa (volantazo → contravolante → suelta y pisa) y consigue un mini-turbo
+de nivel 2. Vuelta en ~37 s, 0 reapariciones.
 
 **Sonido.** Se ha verificado exportando los sonidos sintetizados a WAV y analizando su
 espectro: el chirrido se centra en 1,75 kHz, el motor en 147 Hz (audible en altavoces de
@@ -65,9 +65,9 @@ en el centro al 73 % (agarra) y en el borde exterior al 100 % (derrapa a alta ve
 - **Si es divertido a mano.** Es lo que más importa y no se puede medir aquí. Los valores
   medidos son coherentes (entrada progresiva, derrape sostenible, contravolante útil y
   trampas bloqueadas), pero el ajuste fino requiere jugar.
-- **Anchura de la calle.** Un derrape largo en la recta de salida (16 m de asfalto) acerca
-  mucho el kart al bordillo: el piloto automático acaba en la tierra si derrapa ahí. Un
-  jugador puede corregir, pero hay que comprobarlo.
+- **Anchura de la calle.** Un derrape válido en recta desplaza el kart unos 8 m de lado. Cabe
+  en la calle (24 m entre muros) en zigzag, pero hay que comprobar jugando si resulta cómodo
+  o conviene ensanchar las rectas.
 
 ## Resultados de la v0.2 (Godot 4.5 estable, Linux)
 

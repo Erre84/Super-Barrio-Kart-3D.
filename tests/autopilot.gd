@@ -23,6 +23,7 @@ var _stuck_time := 0.0
 var _quit_after := ""
 var _look_back_frames := 0
 var _stunt := ""
+var _steer_smooth := 0.0
 var _stunt_t := 0.0
 var _stunt_done := false
 var _after_stunt := 0.0
@@ -63,6 +64,12 @@ func _physics_process(delta: float) -> void:
 		_shot("01_countdown", race.countdown < 2.2)
 		return
 	var kmh: float = kart.get_speed_kmh()
+	if "--trace" in OS.get_cmdline_user_args() and _stats["frames"] % 10 == 0:
+		var pr := float(kart.track_info.get("progress", 0.0))
+		if pr > 0.74 and pr < 0.88:
+			print("[trace] p=%.3f kmh=%.0f slip=%.0f steer=%.2f lat=%.1f road=%s st=%d thr=%.1f" % [pr, kmh,
+					rad_to_deg(kart.slip_angle), kart.steer_value, float(kart.track_info.get("lateral", 0.0)),
+					kart.on_road, kart.drift_state, kart.throttle_input])
 	if _stats["frames"] % 300 == 0:
 		print("[autopilot] t=%.1f vuelta=%d prog=%.3f km/h=%.0f pista=%s derrape=%d" % [_t, race.lap,
 				float(kart.track_info.get("progress", 0.0)), kmh, kart.on_road, kart.drift_level])
@@ -118,20 +125,22 @@ func _drive(kart, track) -> void:
 	var fwd: Vector3 = -kart.global_transform.basis.z
 	var ang := fwd.signed_angle_to(to.normalized(), Vector3.UP)  # + = objetivo a la izquierda
 	var steer := clampf(-ang * 2.6, -1.0, 1.0)
-	# Curvatura máxima por delante (+ = curva a la izquierda)
+	# Velocidad máxima ahora para poder frenar a tiempo ante cada curva de los
+	# próximos ~90 m: v² ≤ v_curva² + 2·a·d (v_curva² = agarre / curvatura)
 	var k_ahead := 0.0
-	for k in range(2, 30, 2):
+	var v_allowed := 99.0
+	for k in range(2, 46, 2):
 		var kk: float = track.curv[(i + k) % n]
-		if absf(kk) > absf(k_ahead):
+		if absf(kk) > absf(k_ahead) and k < 30:
 			k_ahead = kk
-	# Velocidad de paso con agarre (v² = a / k), con margen
-	var v_corner: float = sqrt(kart.grip_peak * 0.8 / maxf(absf(k_ahead), 0.001))
+		var vc: float = sqrt(kart.grip_peak * 0.7 / maxf(absf(kk), 0.001))
+		v_allowed = minf(v_allowed, sqrt(vc * vc + 2.0 * 14.0 * k * 2.0))
 	var throttle := 1.0
 	var brake := 0.0
-	if speed > v_corner:
+	if speed > v_allowed:
 		throttle = 0.0
-		if speed > v_corner * 1.12:
-			brake = 0.4
+		if speed > v_allowed * 1.05:
+			brake = 0.7
 	# Si se cruza, contravolante proporcional a la deriva (lo que haría un jugador)
 	# (slip_angle > 0: el morro apunta a la izquierda de la trayectoria → volante a la derecha)
 	if kart.slide_amount > 0.2 and _stunt == "":
@@ -167,17 +176,20 @@ func _drive(kart, track) -> void:
 				if _stunt_t > 0.15:
 					_stunt = ""
 					_stunt_done = true
-	_press("steer_right", maxf(steer, 0.0))
-	_press("steer_left", maxf(-steer, 0.0))
+	# Volante con velocidad limitada (como una persona: no corrige 60 veces por segundo)
+	var rate := 12.0 if _stunt != "" else 4.0
+	_steer_smooth = move_toward(_steer_smooth, steer, rate * get_physics_process_delta_time())
+	_press("steer_right", maxf(_steer_smooth, 0.0))
+	_press("steer_left", maxf(-_steer_smooth, 0.0))
 	_press("accelerate", throttle)
 	_press("brake", brake)
 	# Turbo en la recta de meta
-	if kart.turbo_meter >= 1.0 and absf(steer) < 0.15 and speed > 18.0 and _t > 6.0:
+	if kart.turbo_meter >= 1.0 and absf(steer) < 0.15 and speed > 18.0 and _t > 6.0 and v_allowed > 40.0:
 		Input.action_press("turbo")
 	else:
 		Input.action_release("turbo")
 	# Anti-atascos (no debería hacer falta)
-	if speed < 1.0:
+	if speed < 3.0:
 		_stuck_time += get_physics_process_delta_time()
 		if _stuck_time > 3.0:
 			kart.respawn()

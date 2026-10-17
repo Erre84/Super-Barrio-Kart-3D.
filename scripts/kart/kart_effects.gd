@@ -321,7 +321,7 @@ func _skid_add(a: Vector3, b: Vector3, alpha: float) -> void:
 	var len := d.length()
 	if len < 0.01:
 		return
-	var basis := Basis.looking_at(d / len, Vector3.UP).scaled(Vector3(0.3, 1.0, len + 0.04))
+	var basis := Basis.looking_at(d / len, Vector3.UP).scaled(Vector3(0.34, 1.0, len + 0.04))
 	_skid.set_instance_transform(_skid_next, Transform3D(basis, (a + b) * 0.5))
 	_skid.set_instance_color(_skid_next, Color(0.06, 0.06, 0.07, alpha))
 	_skid_next = (_skid_next + 1) % SKID_MAX
@@ -336,7 +336,7 @@ func _update_skids(marking: float) -> void:
 		if marking > 0.05:
 			if _skid_on[i]:
 				if p.distance_to(_skid_last[i]) > 0.35:
-					_skid_add(_skid_last[i], p, clampf(0.25 + marking * 0.45, 0.0, 0.7))
+					_skid_add(_skid_last[i], p, clampf(0.4 + marking * 0.5, 0.0, 0.85))
 					_skid_last[i] = p
 			else:
 				_skid_on[i] = true

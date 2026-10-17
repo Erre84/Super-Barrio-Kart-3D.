@@ -58,32 +58,32 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var steer_press_rate := 8.5    ## volante digital: rapidez al girar (1/s)
 @export var steer_release_rate := 14.0 ## rapidez al soltar (vuelve al centro)
 @export var steer_reverse_rate := 18.0 ## rapidez al cambiar de lado (contravolante)
-@export var yaw_response := 14.0       ## rapidez con la que el giro sigue al volante con agarre (1/s)
+@export var yaw_response := 16.0       ## rapidez con la que el giro sigue al volante con agarre (1/s)
 @export var yaw_response_slide := 4.5  ## ... mientras desliza (la carrocería tiene inercia)
 
 @export_group("Adherencia")
 @export var grip_peak := 27.0          ## aceleración lateral máxima con agarre (m/s²)
-@export var grip_slide := 15.0         ## agarre dinámico al deslizar (m/s²): inercia lateral
+@export var grip_slide := 13.0         ## agarre dinámico al deslizar (m/s²): inercia lateral
 @export var slip_peak_deg := 4.0       ## deriva hasta la que el agarre es máximo
 @export var slip_full_deg := 14.0      ## deriva a partir de la que el agarre es el dinámico
 @export var slide_min_speed := 11.0    ## por debajo de esta velocidad (m/s) no se pierde adherencia
 @export var slide_steer := 0.45        ## autoridad del volante mientras desliza (contravolante incluido)
 @export var oversteer := 2.5           ## tendencia a cruzarse mientras desliza (rad/s²)
 @export var drift_angle_target := 30.0 ## deriva de equilibrio con el volante a fondo (°): por encima, se frena el cruce
-@export var flick_grip_loss := 0.45    ## agarre perdido como máximo por un volantazo (transferencia de peso)
-@export var flick_sensitivity := 0.045 ## cuánto agarre quita cada rad/s² de aceleración de giro
+@export var flick_grip_loss := 0.75    ## agarre perdido como máximo por un volantazo (transferencia de peso)
+@export var flick_sensitivity := 0.12 ## cuánto agarre quita cada rad/s² de aceleración de giro
 @export var brake_grip_loss := 0.35    ## agarre perdido frenando a fondo (0-1): frenar girando cruza el kart
 @export var slide_drag := 2.5          ## m/s² de velocidad perdida a deriva completa
 @export var offroad_grip := 0.7        ## multiplicador de agarre en tierra
 @export var air_grip := 0.1            ## multiplicador de agarre en el aire
 
 @export_group("Mini-turbo por derrape")
-@export var drift_enter_deg := 11.0    ## deriva que cuenta como derrape
+@export var drift_enter_deg := 9.0    ## deriva que cuenta como derrape
 @export var drift_recover_deg := 5.0   ## deriva por debajo de la cual el kart está enderezado
 @export var drift_recover_hold := 0.08 ## s que hay que mantenerlo enderezado
 @export var drift_spin_deg := 85.0     ## deriva que se considera trompo (derrape inválido)
-@export var drift_min_time := 0.75     ## s mínimos de derrape para que sea válido
-@export var drift_level_times: Array[float] = [0.75, 1.25, 1.9]  ## s de derrape por nivel
+@export var drift_min_time := 0.5     ## s mínimos de derrape para que sea válido
+@export var drift_level_times: Array[float] = [0.5, 1.0, 1.6]  ## s de derrape por nivel
 @export var mini_turbo_time: Array[float] = [0.55, 0.85, 1.2]   ## s de impulso por nivel
 @export var mini_turbo_speed_mult := 1.18  ## punta durante el mini-turbo (× max_speed)
 @export var boost_window := 0.45       ## s tras enderezar para soltar y volver a pisar
@@ -266,7 +266,12 @@ func _physics_process(delta: float) -> void:
 	var prev_yaw_rate := yaw_rate
 	yaw_rate = lerpf(yaw_rate, yaw_target, 1.0 - exp(-resp * delta))
 	# Volantazo: un cambio brusco de giro carga el peso de golpe y las ruedas pierden agarre
-	_flick = clampf(absf(yaw_rate - prev_yaw_rate) / delta * flick_sensitivity, 0.0, flick_grip_loss) * speed_ratio
+	# Solo cuenta mientras el giro AUMENTA (carga los neumáticos), no al deshacerlo, y
+	# crece con el cuadrado de la velocidad: a media velocidad las eses no traicionan.
+	var loading := absf(yaw_rate) > absf(prev_yaw_rate)
+	_flick = 0.0
+	if loading:
+		_flick = clampf(absf(yaw_rate - prev_yaw_rate) / delta * flick_sensitivity, 0.0, flick_grip_loss) * speed_ratio * speed_ratio
 	# Sobreviraje: deslizando, el kart tiende a cruzarse más (hay que contravolantear)
 	if grounded and slide_amount > 0.0 and speed > slide_min_speed:
 		var push := clampf(1.0 - slip_deg / maxf(drift_angle_target, 1.0), -1.0, 1.0)

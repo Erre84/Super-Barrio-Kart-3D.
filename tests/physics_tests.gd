@@ -483,25 +483,24 @@ func _test_mini_turbo_no_release() -> void:
 
 
 func _test_mini_turbo_short_drift() -> void:
+	# Volantazo de solo 0,25 s y contravolante: el kart se cruza un poco pero no lo
+	# bastante tiempo para que cuente como derrape válido.
 	await _at_speed()
 	_inp({"accelerate": 1.0, "steer_right": 1.0})
-	for i in 90:
+	await _frames(15)
+	_inp({"accelerate": 1.0, "steer_left": 1.0})
+	var mx := 0.0
+	for i in 120:
 		await physics_frame
-		if kart.drift_state == 1:
-			break
-	_inp({"accelerate": 1.0, "steer_left": 1.0})   # contravolante inmediato: derrape mínimo
-	for i in 90:
-		await physics_frame
+		mx = maxf(mx, _slip())
 		if _slip() < 4.0:
 			_inp({"accelerate": 1.0})
-		if kart.drift_state != 1:
-			break
 	_inp({})
 	await _frames(5)
 	_inp({"accelerate": 1.0})
 	await _frames(5)
-	_check("derrape demasiado corto no cuenta", _boosts("success") == 0 and _boosts("window") == 0,
-			"eventos %s" % str(events))
+	_check("derrape demasiado corto no cuenta", _boosts("success") == 0 and _boosts("window") == 0 and mx > 5.0,
+			"volantazo de 0,25 s: deriva máx. %.1f°, eventos %s" % [mx, str(events)])
 
 
 func _test_throttle_spam_no_boost() -> void:
