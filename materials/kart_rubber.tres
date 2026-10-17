@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[resource]
+resource_name = "KartRubber"
+vertex_color_use_as_albedo = true
+roughness = 0.8
+metallic_specular = 0.3
+rim_enabled = true
+rim = 0.25
+rim_tint = 0.3
