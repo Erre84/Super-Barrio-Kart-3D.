@@ -34,7 +34,7 @@ func _hud_tick() -> void:
 	hud.update_kart(kart.get_speed_kmh(), kart.turbo_meter, kart.drift_level, kart.boost_time > 0.0,
 			kart.global_position, -kart.global_transform.basis.z)
 	hud.update_drift(int(kart.drift_state), kart.drift_time, kart.drift_level, kart.window_left,
-			kart.boost_window, rad_to_deg(absf(kart.slip_angle)), kart.drift_level_times)
+			kart.boost_window, rad_to_deg(absf(kart.slip_angle)), kart.drift_level_times, kart.boost_armed)
 
 
 func _snap(shot_name: String, free_cam: Array = []) -> void:

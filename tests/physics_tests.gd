@@ -51,6 +51,9 @@ func _run() -> void:
 	await _test_brake_spin_invalid()
 	# --- Mini-turbo por maniobra ---
 	await _test_mini_turbo_success()
+	await _test_natural_exit("suelta el gas en el derrape y pisa al enderezar", "drift", "straight")
+	await _test_natural_exit("suelta en el derrape y pisa mientras sale", "drift", "recovering")
+	await _test_natural_exit("suelta al contravolantear y pisa al salir", "counter", "straight")
 	await _test_mini_turbo_late()
 	await _test_mini_turbo_no_release()
 	await _test_mini_turbo_short_drift()
@@ -527,8 +530,8 @@ func _test_throttle_spam_no_boost() -> void:
 func _test_window_spam_single_boost() -> void:
 	await _at_speed()
 	var ok := await _drift_and_recover(60)
-	for i in 30:
-		_inp({"accelerate": 1.0 if (i / 3) % 2 == 1 else 0.0})
+	for i in 40:
+		_inp({"accelerate": 1.0 if (i / 4) % 2 == 1 else 0.0})   # toques de 0,067 s
 		await physics_frame
 	_inp({"accelerate": 1.0})
 	await _frames(10)
@@ -550,3 +553,41 @@ func _test_chain_on_straight() -> void:
 	got = _boosts("success")
 	_check("encadenar derrapes y mini-turbos en recta", got == 3 and kart.get_speed_kmh() > 85.0,
 			"%d mini-turbos seguidos, %.0f km/h al final" % [got, kart.get_speed_kmh()])
+
+
+## Salidas "naturales" del derrape (lo que hace un jugador): soltar el gas en algún momento
+## del derrape y volver a acelerar al salir. Todas deben dar un mini-turbo que se note.
+func _test_natural_exit(label: String, lift_at: String, press_at: String) -> void:
+	await _at_speed(200)
+	var gas := 1.0
+	for i in 40:
+		if lift_at == "drift" and i == 15:
+			gas = 0.0
+		_inp({"accelerate": gas, "steer_right": 1.0})
+		await physics_frame
+	var counter := true
+	var vmin := 999.0
+	var vmax := 0.0
+	var straight := -1
+	for i in 150:
+		var s := _slip()
+		if s < 4.0:
+			counter = false
+			if straight < 0:
+				straight = i
+		if lift_at == "counter" and i == 0:
+			gas = 0.0
+		if press_at == "recovering" and gas == 0.0 and s < 12.0:
+			gas = 1.0
+		if press_at == "straight" and gas == 0.0 and straight >= 0 and i >= straight + 8:
+			gas = 1.0
+		var d := {"accelerate": gas}
+		if counter:
+			d["steer_left"] = 1.0
+		_inp(d)
+		await physics_frame
+		vmin = minf(vmin, kart.get_speed_kmh())
+		if _boosts("success") > 0:
+			vmax = maxf(vmax, kart.get_speed_kmh())
+	_check("mini-turbo natural: " + label, _boosts("success") == 1 and vmax > 120.0,
+			"sale a %.0f km/h → impulso hasta %.0f km/h (punta normal 104)" % [vmin, vmax])

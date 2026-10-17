@@ -84,10 +84,11 @@ enum DriftState { NONE, SLIDING, WINDOW }
 @export var drift_spin_deg := 85.0     ## deriva que se considera trompo (derrape inválido)
 @export var drift_min_time := 0.3     ## s mínimos de derrape para que sea válido
 @export var drift_level_times: Array[float] = [0.3, 0.8, 1.4]  ## s de derrape por nivel
-@export var mini_turbo_time: Array[float] = [0.55, 0.85, 1.2]   ## s de impulso por nivel
-@export var mini_turbo_speed_mult := 1.18  ## punta durante el mini-turbo (× max_speed)
-@export var boost_window := 0.55       ## s tras enderezar para soltar y volver a pisar
-@export var release_grace := 0.25       ## s antes de enderezar en los que ya cuenta haber soltado
+@export var mini_turbo_time: Array[float] = [0.8, 1.1, 1.5]    ## s de impulso por nivel
+@export var mini_turbo_kick: Array[float] = [5.0, 7.0, 9.0]    ## m/s de empujón instantáneo por nivel
+@export var mini_turbo_speed: Array[float] = [1.22, 1.3, 1.38]  ## punta durante el mini-turbo por nivel (× max_speed)
+@export var boost_fire_deg := 16.0     ## al pisar, sale el impulso si la deriva ya es menor que esto
+@export var boost_window := 0.7        ## s tras enderezar para soltar y volver a pisar (si no lo hiciste ya)
 @export var lift_min := 0.04           ## s mínimos con el acelerador suelto
 
 @export_group("Turbo")
@@ -152,8 +153,9 @@ var _time := 0.0
 var _recover_t := 0.0
 var _lifted := false
 var _lift_start := -10.0
-var _window_released := false
-var _window_release_t := 0.0
+var _press_t := -10.0
+## true = turbo cargado: has soltado el gas durante el derrape; al volver a pisar saldrá.
+var boost_armed := false
 var _window_open_t := 0.0
 var _spun := false
 var _flick := 0.0
@@ -382,22 +384,25 @@ func _update_drift(delta: float, throttle: float, grounded: bool) -> void:
 	var deg := rad_to_deg(absf(slip_angle))
 	var speed := Vector2(velocity.x, velocity.z).length()
 
-	# Seguimiento del acelerador (soltar = por debajo del 20 %)
+	# Seguimiento del acelerador (soltar = por debajo del 20 %, pisar = más del 50 %)
 	if throttle < 0.2 and not _lifted:
 		_lifted = true
 		_lift_start = _time
 	elif throttle > 0.5 and _lifted:
 		_lifted = false
-		if drift_state == DriftState.WINDOW and _window_released:
-			var lift_time := _time - _window_release_t
-			if lift_time >= lift_min:
-				_mini_turbo()
-			else:
-				_drift_fail("fail_lift")
-			return
+		_press_t = _time
 
 	if _spun and deg < drift_recover_deg:
 		_spun = false
+
+	# Turbo cargado: has soltado el gas en algún momento del derrape (o de la ventana).
+	# Al volver a pisar mientras el kart ya está saliendo del derrape, sale el impulso.
+	var valid := drift_level > 0 and drift_time >= drift_min_time
+	if drift_state != DriftState.NONE and _lifted and _time - _lift_start >= lift_min:
+		boost_armed = true
+	if boost_armed and valid and throttle > 0.5 and deg < boost_fire_deg:
+		_mini_turbo()
+		return
 
 	match drift_state:
 		DriftState.NONE, DriftState.WINDOW:
@@ -407,12 +412,8 @@ func _update_drift(delta: float, throttle: float, grounded: bool) -> void:
 				_start_drift()
 			elif drift_state == DriftState.WINDOW:
 				window_left -= delta
-				# Solo cuenta soltar DESPUÉS de enderezar (o justo antes, ver release_grace)
-				if _lifted and not _window_released and _lift_start >= _window_open_t - release_grace:
-					_window_released = true
-					_window_release_t = _lift_start
 				if window_left <= 0.0:
-					_drift_fail("fail_late" if _window_released else "fail_lift")
+					_drift_fail("fail_late" if boost_armed else "fail_lift")
 		DriftState.SLIDING:
 			if deg > drift_recover_deg:
 				drift_time += delta
@@ -453,16 +454,25 @@ func _on_recovered() -> void:
 	drift_state = DriftState.WINDOW
 	window_left = boost_window
 	_window_open_t = _time
-	# Si ya había soltado justo antes de enderezar, también vale
-	_window_released = _lifted and (_time - _lift_start) <= release_grace
-	_window_release_t = _lift_start
 	drift_event.emit("window", drift_level)
 
 
 func _mini_turbo() -> void:
 	var lvl := clampi(drift_level, 1, mini_turbo_time.size())
 	mini_turbos += 1
-	apply_boost(mini_turbo_time[lvl - 1], "mini%d" % lvl, mini_turbo_speed_mult)
+	var mult: float = mini_turbo_speed[lvl - 1]
+	apply_boost(mini_turbo_time[lvl - 1], "mini%d" % lvl, mult)
+	# Patada instantánea hacia delante: el impulso se nota aunque salgas lento del derrape
+	var fwd := -global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var planar := Vector3(velocity.x, 0.0, velocity.z)
+	var along := planar.dot(fwd)
+	var lateral := planar - fwd * along
+	var new_along := maxf(minf(along + float(mini_turbo_kick[lvl - 1]), max_speed * mult), along)
+	var nv := fwd * new_along + lateral * 0.3
+	velocity.x = nv.x
+	velocity.z = nv.z
 	turbo_meter = minf(turbo_meter + 0.06 * lvl, 1.0)
 	drift_event.emit("success", lvl)
 	_reset_drift()
@@ -475,10 +485,10 @@ func _drift_fail(kind: String) -> void:
 
 
 func _reset_drift() -> void:
+	boost_armed = false
 	drift_state = DriftState.NONE
 	drift_time = 0.0
 	window_left = 0.0
-	_window_released = false
 	_recover_t = 0.0
 	if drift_level != 0:
 		drift_level = 0

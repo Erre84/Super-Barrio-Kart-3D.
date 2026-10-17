@@ -19,6 +19,27 @@ También se ejecutan solas en GitHub Actions en cada *push* y *pull request*
    la "ese". Sirve para detectar roturas, no para medir lo bien que se conduce.
 3. **Capturas** (`--shots`): necesitan una GPU o un servidor gráfico virtual (Xvfb).
 
+## Resultados de la v0.5: el mini-turbo sale al volver a acelerar
+
+Problema tras probar la 0.4: "cuando derrapo y vuelvo a acelerar, falta el impulso". Causa
+encontrada con `tests/drift_flows.gd`, que prueba las formas naturales de salir de un derrape:
+solo funcionaba **mantener el gas a fondo todo el derrape** y luego soltar y pisar. Si
+soltabas el gas durante el derrape o al contravolantear (lo natural), el juego lo rechazaba.
+Además el impulso era flojo (+18 % de punta) y casi no se notaba al salir lento.
+
+| Forma de salir del derrape | v0.4 | v0.5 |
+|---|---|---|
+| Gas a fondo; al enderezar, suelta y pisa | turbo (104 → 123 km/h) | turbo (103 → 136 km/h) |
+| Suelta en el derrape, pisa al enderezar | **nada** | turbo (59 → 136 km/h) |
+| Suelta en el derrape, pisa mientras sale | **nada** | turbo (63 → 136 km/h) |
+| Suelta al contravolantear, pisa al enderezar | **nada** | turbo (73 → 136 km/h) |
+| Suelta al contravolantear, pisa mientras sale | **nada** | turbo (77 → 136 km/h) |
+| No suelta nunca el gas | nada | nada (a propósito) |
+
+Siguen bloqueados: machacar el acelerador sin derrapar (0 turbos) y machacarlo en la ventana
+(un solo turbo). El piloto automático consigue **6 mini-turbos en una vuelta** sin maniobra
+programada (antes 1). 34/34 pruebas de física OK.
+
 ## Resultados de la v0.4: derrape accesible y conos (Godot 4.5 estable, Linux)
 
 Tras probar la APK 0.3, el derrape resultaba demasiado exigente (un solo derrape en una

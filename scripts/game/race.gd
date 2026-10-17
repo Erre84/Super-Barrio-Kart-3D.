@@ -171,7 +171,7 @@ func _process(_delta: float) -> void:
 	hud.update_kart(kart.get_speed_kmh(), kart.turbo_meter, kart.drift_level, kart.boost_time > 0.0,
 			kart.global_position, -kart.global_transform.basis.z)
 	hud.update_drift(int(kart.drift_state), kart.drift_time, kart.drift_level, kart.window_left,
-			kart.boost_window, rad_to_deg(absf(kart.slip_angle)), kart.drift_level_times)
+			kart.boost_window, rad_to_deg(absf(kart.slip_angle)), kart.drift_level_times, kart.boost_armed)
 
 
 func _toggle_pause() -> void:
@@ -194,7 +194,8 @@ func _on_drift_event(kind: String, level: int) -> void:
 		"success":
 			hud.show_message(["¡MINI-TURBO!", "¡MINI-TURBO!", "¡SUPER MINI-TURBO!"][clampi(level, 1, 3) - 1],
 					"", 0.8, col)
-			camera.punch(4.0 + level * 2.0)
+			camera.punch(8.0 + level * 3.0)
+			camera.add_shake(0.12 + 0.04 * level)
 		"fail_late":
 			hud.show_message("", "Tarde: pisa antes", 0.9, Color.WHITE)
 		"fail_lift":

@@ -35,10 +35,14 @@ En la v0.3 solo la esquina inferior derecha (volante a fondo a 104 km/h) daba "T
    llena: **azul** (0,3 s) → **naranja** (0,8 s) → **morado** (1,4 s).
 3. **Contravolantea para enderezar.** Gira hacia el otro lado: se endereza en ~0,85 s.
    Soltando el volante también se recupera, pero tarda unos 2 s.
-4. **¡Suelta y pisa!** Al quedar recto suena una campanita y aparece **"¡SUELTA Y PISA!"**.
-   Tienes **0,55 s** para soltar el acelerador y volver a pisarlo (también vale si ya lo
-   habías soltado hasta 0,25 s antes de enderezar). Resultado: **¡MINI-TURBO!**, más largo
-   cuanto más duró el derrape (0,55 / 0,85 / 1,2 s).
+4. **Suelta el gas y vuelve a acelerar (v0.5).** En algún momento del derrape (mientras
+   derrapas, al contravolantear o al quedar recto) **suelta el acelerador**: el indicador
+   pasa a "¡endereza y PISA!" (turbo cargado). Al **volver a pisar** cuando el kart ya está
+   saliendo del derrape (menos de 16° de cruce): **¡MINI-TURBO!** Si no habías soltado, al
+   quedar recto aparece "¡SUELTA Y PISA!" y tienes 0,7 s para hacerlo.
+   - El impulso da una **patada instantánea** (+18 / +25 / +32 km/h según el nivel) y sube la
+     punta hasta 127 / 136 / 144 km/h durante 0,8 / 1,1 / 1,5 s. Se nota aunque salgas
+     lento del derrape: de 60 km/h a 136 km/h.
 
 **Encadenar.** Después de un mini-turbo puedes provocar otro enseguida, también en recta:
 volantazo a un lado → contravolante → suelta y pisa → volantazo al otro…
@@ -50,7 +54,7 @@ volantazo a un lado → contravolante → suelta y pisa → volantazo al otro…
 | Machacar el acelerador sin derrapar | Nada: sin derrape válido no hay ventana |
 | Machacar el acelerador durante la ventana | Un solo mini-turbo: cada derrape da **un** intento |
 | Golpe de volante muy corto (~0,13 s) | No llega a ser derrape válido: no abre ventana |
-| No soltar el acelerador al enderezar | "Suelta el acelerador y vuelve a pisar" |
+| No soltar nunca el acelerador | Sin impulso: hay que soltar y volver a pisar |
 | Pisar cuando ya pasó la ventana | Sin impulso |
 | Cruzarse más de 85° (trompo) | Derrape anulado |
 | Chocar fuerte contra un muro derrapando | Derrape anulado |
@@ -83,7 +87,8 @@ Todo está en el inspector del nodo `Kart` (`scripts/kart/kart.gd`):
   `flick_sensitivity` (volantazos), `brake_grip_loss`, `slide_drag`.
 - **Mini-turbo**: `drift_enter_deg`, `drift_recover_deg`, `drift_recover_hold`,
   `drift_spin_deg`, `drift_min_time`, `drift_level_times`, `mini_turbo_time`,
-  `mini_turbo_speed_mult`, `boost_window`, `release_grace`, `lift_min`.
+  `mini_turbo_speed` (punta por nivel), `mini_turbo_kick` (empujón instantáneo por nivel),
+  `boost_fire_deg` (cruce máximo al pisar), `boost_window`, `lift_min`.
 
 **Cómo funciona por dentro.** Cada fotograma:
 1. La velocidad de giro sigue al volante con inercia.

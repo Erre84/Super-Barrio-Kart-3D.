@@ -77,7 +77,7 @@ func _on_drift_event(kind: String, _level: int) -> void:
 		"window":
 			play("chime", -5.0, 1.0 + 0.08 * _level)
 		"success":
-			play("boost", -3.0, 1.0 + 0.06 * _level)
+			play("boost", 0.0, 1.0 + 0.06 * _level)
 		"fail_late", "fail_lift", "fail_short", "fail_spin":
 			play("fail", -10.0)
 

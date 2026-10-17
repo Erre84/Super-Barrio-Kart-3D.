@@ -69,6 +69,7 @@ class DriftMeter extends Control:
 	var level := 0
 	var window_frac := 0.0
 	var slip_deg := 0.0
+	var armed := false
 	var t := 0.0
 
 	func _draw() -> void:
@@ -90,6 +91,10 @@ class DriftMeter extends Control:
 			var txt := "DERRAPE  %d°" % int(slip_deg)
 			if level == 0:
 				txt += "  (aguanta…)"
+			elif not armed:
+				txt += "  · suelta el gas"
+			else:
+				txt += "  · ¡endereza y PISA!"
 			draw_string_outline(font, Vector2(0, y - 8), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 6, Color(0, 0, 0, 0.8))
 			draw_string(font, Vector2(0, y - 8), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, COLS[maxi(level - 1, 0)] if level > 0 else Color.WHITE)
 		else:
@@ -97,7 +102,7 @@ class DriftMeter extends Control:
 			var col: Color = COLS[clampi(level - 1, 0, 2)]
 			draw_rect(Rect2(0, y, w, h), Color(0, 0, 0, 0.5))
 			draw_rect(Rect2(2, y + 2, (w - 4) * window_frac, h - 4), Color(1.0, 0.85, 0.15))
-			var txt2 := "¡SUELTA Y PISA!"
+			var txt2 := "¡PISA!" if armed else "¡SUELTA Y PISA!"
 			var fs := 34
 			var ts := font.get_string_size(txt2, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
 			var p := Vector2((w - ts.x) * 0.5, y - 10)
@@ -305,7 +310,8 @@ func update_kart(kmh: float, turbo: float, drift_level: int, boosting: bool, pos
 
 ## Estado del derrape para el indicador (llamado cada fotograma por la carrera).
 func update_drift(state: int, drift_time: float, level: int, window_left: float, window_total: float,
-		slip_deg: float, levels: Array[float]) -> void:
+		slip_deg: float, levels: Array[float], armed: bool = false) -> void:
+	drift_meter.armed = armed
 	drift_meter.state = state
 	drift_meter.drift_time = drift_time
 	drift_meter.level = level
