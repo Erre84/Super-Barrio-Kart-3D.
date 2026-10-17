@@ -43,6 +43,8 @@ const DEFAULT_ID := "zule"
 const MODELED := {
 	"zule": preload("res://scripts/racers/zule.gd"),
 	"dami": preload("res://scripts/racers/dami.gd"),
+	"giovanni": preload("res://scripts/racers/giovanni.gd"),
+	"exito": preload("res://scripts/racers/exito.gd"),
 }
 
 

@@ -99,10 +99,16 @@ const HEAD_CENTER := Vector3(0, 0.36, 0)
 var _brow_base_y := 0.475
 
 # Geometría del volante (en coordenadas del Body)
-const WHEEL_CENTER := Vector3(0, 0.88, -0.38)
+var WHEEL_CENTER := Vector3(0, 0.88, -0.38)
 const WHEEL_TILT := -58.0
 const WHEEL_R := 0.19
-const DRIVER_ORIGIN := Vector3(0, 0.52, 0.28)
+var DRIVER_ORIGIN := Vector3(0, 0.52, 0.28)
+
+
+## Sube o baja al piloto y el volante juntos (karts con el asiento más alto).
+func _raise_driver(dy: float) -> void:
+	WHEEL_CENTER.y += dy
+	DRIVER_ORIGIN.y += dy
 
 # Estado de animación
 var _t := 0.0
@@ -193,6 +199,23 @@ func _mi(mesh: Mesh, node_name: String, parent: Node3D) -> MeshInstance3D:
 	mi.mesh = mesh
 	parent.add_child(mi)
 	return mi
+
+
+## Rótulo 3D pegado a la carrocería (nombres, números).
+func _text(t: String, pos: Vector3, rot_deg: Vector3, px: float, col: Color, size: int = 64,
+		outline: Color = Color(0, 0, 0, 0)) -> Label3D:
+	var l := Label3D.new()
+	l.text = t
+	l.font_size = size
+	l.pixel_size = px
+	l.modulate = col
+	l.outline_size = 0 if outline.a == 0.0 else 10
+	l.outline_modulate = outline
+	l.position = pos
+	l.rotation_degrees = rot_deg
+	l.double_sided = false
+	body_pivot.add_child(l)
+	return l
 
 
 ## Atajo para secciones de loft (ver MeshBuilder.section).
@@ -664,11 +687,13 @@ func _make_mouth(kind: String, hc: Vector3) -> Node3D:
 			m.box(Vector3(0, -0.001, -0.011), Vector3(0.15, 0.02, 0.02), Color.WHITE)
 			m.sphere(Vector3(0, -0.033, -0.011), Vector3(0.04, 0.012, 0.015), 6, 2, Color("ef6f86"))
 		"shout":
-			# Boca muy abierta: hueco oscuro, dientes arriba y lengua
-			m.sphere(Vector3(0, -0.02, 0.01), Vector3(0.085, 0.075, 0.035), 10, 6, Color("4a1420"))
-			m.box(Vector3(0, 0.04, -0.016), Vector3(0.12, 0.022, 0.02), Color.WHITE)
-			m.sphere(Vector3(0, -0.065, -0.012), Vector3(0.05, 0.022, 0.02), 7, 3, Color("e8697e"))
-			m.sphere(Vector3(0, -0.02, 0.012), Vector3(0.095, 0.085, 0.03), 10, 6, lip.darkened(0.2))
+			# Boca muy abierta (algo más baja que las demás): hueco oscuro, dientes arriba y lengua
+			node.position.y -= 0.035
+			node.position.z += 0.012
+			m.sphere(Vector3(0, -0.01, -0.006), Vector3(0.09, 0.07, 0.04), 10, 6, Color("4a1420"))
+			m.box(Vector3(0, 0.042, -0.036), Vector3(0.13, 0.024, 0.02), Color.WHITE)
+			m.sphere(Vector3(0, -0.05, -0.03), Vector3(0.055, 0.024, 0.02), 7, 3, Color("e8697e"))
+			m.sphere(Vector3(0, -0.01, 0.0), Vector3(0.1, 0.08, 0.04), 10, 6, lip.darkened(0.15))
 		_:
 			m.box(Vector3(0, -0.007, 0), Vector3(0.07, 0.02, 0.025), lip)
 			for s: float in [-1.0, 1.0]:
